@@ -1,8 +1,10 @@
 import {
   type Account,
+  type CatalogProduct,
   type DrovaApi,
   type GameDetail,
   type GameSummary,
+  type MerchantSession,
   type ProductUpdate,
   type Station,
   type StationFlag,
@@ -92,6 +94,25 @@ const initialProducts: Record<string, GameDetail[]> = {
   'demo-station-03': [detail('game-01'), detail('game-04', false), detail('game-07'), detail('game-08')],
 };
 
+const demoCatalog: CatalogProduct[] = Object.entries(catalog).map(
+  ([productId, [title]]) => ({ productId, title, displayName: title }),
+);
+
+const demoLatestSessions: Record<string, MerchantSession | null> = {
+  'demo-station-01': {
+    product_id: 'game-01',
+    status: 'FINISHED',
+    created_on: now - 28 * 60_000,
+    finished_on: now - 12 * 60_000,
+  },
+  'demo-station-02': {
+    product_id: 'game-02',
+    status: 'ACTIVE',
+    created_on: now - 9 * 60_000,
+  },
+  'demo-station-03': null,
+};
+
 function summary(value: GameDetail): GameSummary {
   return {
     productId: value.productId,
@@ -163,12 +184,14 @@ export function createDemoApi(): DrovaApi {
 
   return {
     getAccount: () => pause(initialAccount),
+    getCatalog: () => pause(demoCatalog),
     getStations: () => pause(stations),
     getStation: async (serverId) => {
       const station = stations.find((item) => item.uuid === serverId);
       if (!station) throw new Error('Станция не найдена.');
       return pause(station);
     },
+    getLatestSession: (serverId) => pause(demoLatestSessions[serverId] ?? null),
     setStationFlag: async (serverId: string, flag: StationFlag, target: boolean) => {
       await wait();
       stations = stations.map((station) => station.uuid === serverId ? { ...station, [flag]: target } : station);

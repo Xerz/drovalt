@@ -38,10 +38,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { formatHeartbeat, isStationOnline } from '@/lib/drova/format';
+import {
+  formatHeartbeat,
+  getStationDisplayStatus,
+  isStationOnline,
+} from '@/lib/drova/format';
 import { toStationApiTarget } from '@/lib/drova/client';
 import { mapLimited } from '@/lib/drova/sync';
-import type { Station, StationFlag } from '@/lib/drova/types';
+import type {
+  CatalogProduct,
+  GameSummary,
+  MerchantSession,
+  Station,
+  StationFlag,
+} from '@/lib/drova/types';
 import { sanitizeDescriptionHtml } from '@/lib/security/sanitize-description';
 
 const descriptionSchema = z.object({
@@ -61,7 +71,7 @@ export function StationsPage() {
     enabled: Boolean(account),
   });
   const stations = stationsQuery.data ?? [];
-  const productCountsQuery = useQuery({
+  const stationProductsQuery = useQuery<Record<string, GameSummary[] | null>>({
     queryKey: [
       'station-game-counts',
       mode,
@@ -71,10 +81,7 @@ export function StationsPage() {
       Object.fromEntries(
         await mapLimited(stations, 4, async (station) => {
           try {
-            return [
-              station.uuid,
-              (await api.getProducts(station.uuid)).length,
-            ] as const;
+            return [station.uuid, await api.getProducts(station.uuid)] as const;
           } catch {
             return [station.uuid, null] as const;
           }
@@ -83,6 +90,44 @@ export function StationsPage() {
     enabled: Boolean(account && stations.length),
     staleTime: 30_000,
   });
+  const latestSessionsQuery = useQuery<Record<string, MerchantSession | null>>({
+    queryKey: [
+      'station-latest-sessions',
+      mode,
+      stations.map((station) => station.uuid),
+    ],
+    queryFn: async () =>
+      Object.fromEntries(
+        await mapLimited(stations, 4, async (station) => {
+          try {
+            return [
+              station.uuid,
+              await api.getLatestSession(station.uuid),
+            ] as const;
+          } catch {
+            return [station.uuid, null] as const;
+          }
+        }),
+      ),
+    enabled: Boolean(account && stations.length),
+    staleTime: 15_000,
+  });
+  const catalogQuery = useQuery<CatalogProduct[]>({
+    queryKey: ['catalog', mode],
+    queryFn: () => api.getCatalog(),
+    enabled: Boolean(account),
+    staleTime: 5 * 60_000,
+  });
+  const catalogTitles = useMemo(
+    () =>
+      new Map(
+        (catalogQuery.data ?? []).map((product) => [
+          product.productId,
+          product.displayName?.trim() || product.title,
+        ]),
+      ),
+    [catalogQuery.data],
+  );
 
   const flagMutation = useMutation({
     mutationFn: async ({
@@ -126,10 +171,18 @@ export function StationsPage() {
   ).length;
   const pendingId = flagMutation.variables?.station.uuid;
   const isRefreshing =
-    stationsQuery.isFetching || productCountsQuery.isFetching;
+    stationsQuery.isFetching ||
+    stationProductsQuery.isFetching ||
+    latestSessionsQuery.isFetching ||
+    catalogQuery.isFetching;
 
   const refreshAll = async () => {
-    await Promise.all([stationsQuery.refetch(), productCountsQuery.refetch()]);
+    await Promise.all([
+      stationsQuery.refetch(),
+      stationProductsQuery.refetch(),
+      latestSessionsQuery.refetch(),
+      catalogQuery.refetch(),
+    ]);
   };
 
   return (
@@ -189,12 +242,13 @@ export function StationsPage() {
           </p>
         </div>
       ) : (
-        <div className="mt-7 overflow-hidden rounded-2xl border bg-card shadow-[0_18px_60px_-44px_rgb(0_0_0/0.45)]">
+        <div className="mt-7 overflow-x-auto rounded-2xl border bg-card shadow-[0_18px_60px_-44px_rgb(0_0_0/0.45)]">
           <Table>
             <TableHeader className="bg-muted/45">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="h-11 pl-5">Станция</TableHead>
                 <TableHead>Статус</TableHead>
+                <TableHead>Последняя сессия</TableHead>
                 <TableHead>Игры</TableHead>
                 <TableHead className="text-center">Публикация</TableHead>
                 <TableHead className="text-center">Рабочий стол</TableHead>
@@ -204,13 +258,21 @@ export function StationsPage() {
             </TableHeader>
             <TableBody>
               {stations.map((station) => {
-                const online = isStationOnline(
-                  station.state,
-                  station.last_heartbeat,
-                );
                 const pending =
                   flagMutation.isPending && pendingId === station.uuid;
-                const productCount = productCountsQuery.data?.[station.uuid];
+                const productList = stationProductsQuery.data?.[station.uuid];
+                const latestSession = latestSessionsQuery.data?.[station.uuid];
+                const displayStatus = getStationDisplayStatus(
+                  station.state,
+                  station.last_heartbeat,
+                  latestSession?.status,
+                );
+                const latestGameTitle = latestSession?.product_id
+                  ? (productList?.find(
+                      (product) =>
+                        product.productId === latestSession.product_id,
+                    )?.title ?? catalogTitles.get(latestSession.product_id))
+                  : undefined;
                 return (
                   <TableRow key={station.uuid} className="h-[72px]">
                     <TableCell className="max-w-[320px] pl-5">
@@ -222,12 +284,10 @@ export function StationsPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`size-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                          className={`size-2 rounded-full ${displayStatus.dotClass}`}
                         />
                         <div>
-                          <p className="text-sm">
-                            {online ? 'В сети' : 'Не в сети'}
-                          </p>
+                          <p className="text-sm">{displayStatus.label}</p>
                           <p className="text-xs text-muted-foreground">
                             {formatHeartbeat(station.last_heartbeat)}
                           </p>
@@ -235,9 +295,27 @@ export function StationsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {typeof productCount === 'number' ? (
-                        <Badge variant="secondary">{productCount}</Badge>
-                      ) : productCount === null ? (
+                      {latestSessionsQuery.isPending ? (
+                        <Skeleton className="h-8 w-28" />
+                      ) : latestSession ? (
+                        <div className="max-w-[220px]">
+                          <p className="truncate text-sm font-medium">
+                            {latestGameTitle ?? 'Название недоступно'}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {formatHeartbeat(latestSession.created_on)}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Сессий нет
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {Array.isArray(productList) ? (
+                        <Badge variant="secondary">{productList.length}</Badge>
+                      ) : productList === null ? (
                         <Badge
                           variant="outline"
                           title="Не удалось прочитать список игр"

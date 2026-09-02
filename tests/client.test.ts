@@ -5,7 +5,9 @@ import {
   createLiveApi,
   toProductUpdateRequest,
   toStationApiTarget,
+  toVerifiedWriteState,
 } from '@/lib/drova/client';
+import { getStationDisplayStatus } from '@/lib/drova/format';
 
 describe('Drova client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -63,7 +65,7 @@ describe('Drova client', () => {
     ).toEqual({
       server_id: 'station-demo',
       product_id: 'product-demo',
-      verified: '2',
+      verified: 'READY',
       enabled: true,
       game_path: null,
       work_path: null,
@@ -72,15 +74,83 @@ describe('Drova client', () => {
     });
   });
 
+  it('maps only the observed verification state into the write enum', () => {
+    expect(toVerifiedWriteState(2)).toBe('READY');
+    expect(() => toVerifiedWriteState(1)).toThrow(/неизвестное состояние/i);
+  });
+
+  it('distinguishes ready, busy, unverified and offline stations', () => {
+    const recent = Date.now() - 10_000;
+    expect(getStationDisplayStatus('LISTEN', recent).label).toBe('Готова');
+    expect(getStationDisplayStatus('LISTEN', recent, 'ACTIVE').label).toBe(
+      'Используется',
+    );
+    expect(getStationDisplayStatus('BUSY', recent).label).toBe('Используется');
+    expect(getStationDisplayStatus('UNVERIFIED', recent).label).toBe(
+      'Не проверена',
+    );
+    expect(getStationDisplayStatus(null, Date.now() - 600_000).label).toBe(
+      'Не в сети',
+    );
+  });
+
   it('adds a missing product with POST and no request body', async () => {
-    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-      new Response(null, { status: 204 }));
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
-    await createLiveApi('private-token-value').addProduct('station-demo', 'product-demo');
+    await createLiveApi('private-token-value').addProduct(
+      'station-demo',
+      'product-demo',
+    );
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://services.drova.io/server-manager/serverproduct/add/station-demo/product-demo');
+    expect(url).toBe(
+      'https://services.drova.io/server-manager/serverproduct/add/station-demo/product-demo',
+    );
     expect(init?.method).toBe('POST');
     expect(init?.body).toBeUndefined();
     expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
   });
+
+  it('loads the public catalog and the latest station session', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      if (requestUrl(url).includes('/product-manager/product/listfull2')) {
+        return new Response(
+          JSON.stringify([
+            {
+              productId: 'game-demo',
+              title: 'Demo Game',
+              displayName: 'Demo Game',
+            },
+          ]),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          sessions: [
+            { product_id: 'game-demo', status: 'ACTIVE', created_on: 123 },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = createLiveApi('private-token-value');
+    await expect(api.getCatalog()).resolves.toHaveLength(1);
+    await expect(api.getLatestSession('station-demo')).resolves.toMatchObject({
+      status: 'ACTIVE',
+      product_id: 'game-demo',
+    });
+    expect(requestUrl(fetchMock.mock.calls[0][0])).toContain('limit=2000');
+    expect(requestUrl(fetchMock.mock.calls[1][0])).toContain(
+      'server_id=station-demo&limit=1',
+    );
+  });
 });
+
+function requestUrl(value: string | URL | Request) {
+  if (typeof value === 'string') return value;
+  return value instanceof URL ? value.href : value.url;
+}

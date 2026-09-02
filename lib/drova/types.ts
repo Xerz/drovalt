@@ -32,6 +32,12 @@ export const gameSummarySchema = z.object({
   needVpn: z.boolean().optional().default(false),
 });
 
+export const catalogProductSchema = z.object({
+  productId: z.string(),
+  title: z.string(),
+  displayName: z.string().optional(),
+});
+
 const nullableText = z.string().nullable();
 
 export const gameDetailSchema = z.object({
@@ -85,10 +91,23 @@ export const prepaidStatsSchema = z.object({
   balance: z.number().nullable().optional(),
 });
 
+export const merchantSessionSchema = z.object({
+  product_id: z.string().nullable().optional(),
+  status: z.string(),
+  created_on: z.number(),
+  finished_on: z.number().nullable().optional(),
+});
+
+export const merchantSessionListSchema = z.object({
+  sessions: z.array(merchantSessionSchema).default([]),
+});
+
 export type Account = z.infer<typeof accountSchema>;
 export type Station = z.infer<typeof stationSchema>;
 export type GameSummary = z.infer<typeof gameSummarySchema>;
+export type CatalogProduct = z.infer<typeof catalogProductSchema>;
 export type GameDetail = z.infer<typeof gameDetailSchema>;
+export type MerchantSession = z.infer<typeof merchantSessionSchema>;
 export type UsageStat = z.infer<typeof usageStatSchema>;
 export type UsagePeriod = z.infer<typeof usagePeriodSchema>;
 export type Usage = z.infer<typeof usageSchema>;
@@ -97,7 +116,10 @@ export type PrepaidStats = z.infer<typeof prepaidStatsSchema>;
 
 export type StationFlag = 'published' | 'allow_desktop' | 'disable_updates';
 
-export type ProductOverrides = Pick<GameDetail, 'gamePath' | 'workPath' | 'allowedPaths' | 'args'>;
+export type ProductOverrides = Pick<
+  GameDetail,
+  'gamePath' | 'workPath' | 'allowedPaths' | 'args'
+>;
 
 export type ProductUpdate = ProductOverrides & {
   productId: string;
@@ -107,15 +129,29 @@ export type ProductUpdate = ProductOverrides & {
 
 export interface DrovaApi {
   getAccount(): Promise<Account>;
+  getCatalog(): Promise<CatalogProduct[]>;
   getStations(merchantId: string): Promise<Station[]>;
   getStation(serverId: string, merchantId: string): Promise<Station>;
-  setStationFlag(serverId: string, flag: StationFlag, target: boolean): Promise<void>;
-  updateStation(serverId: string, name: string, description: string): Promise<void>;
+  getLatestSession(serverId: string): Promise<MerchantSession | null>;
+  setStationFlag(
+    serverId: string,
+    flag: StationFlag,
+    target: boolean,
+  ): Promise<void>;
+  updateStation(
+    serverId: string,
+    name: string,
+    description: string,
+  ): Promise<void>;
   getProducts(serverId: string): Promise<GameSummary[]>;
   getProduct(serverId: string, productId: string): Promise<GameDetail>;
   addProduct(serverId: string, productId: string): Promise<void>;
   updateProduct(serverId: string, update: ProductUpdate): Promise<void>;
-  setProductEnabled(serverId: string, productId: string, target: boolean): Promise<void>;
+  setProductEnabled(
+    serverId: string,
+    productId: string,
+    target: boolean,
+  ): Promise<void>;
   getUsage(): Promise<Usage>;
   getUnpaidStats(merchantId: string): Promise<UnpaidStats>;
 }

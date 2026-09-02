@@ -62,7 +62,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { GameDetail, GameSummary, Station } from '@/lib/drova/types';
+import type {
+  CatalogProduct,
+  GameDetail,
+  GameSummary,
+  Station,
+} from '@/lib/drova/types';
 import {
   buildGameSyncPlan,
   executeGameSyncPlan,
@@ -114,6 +119,7 @@ export function GamesPage() {
   const [filter, setFilter] = useState<GameFilter>('all');
   const [sorting, setSorting] = useState<SortingState>([]);
   const [editingProductId, setEditingProductId] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -315,6 +321,14 @@ export function GamesPage() {
             Обновить
           </Button>
           <Button
+            disabled={!selectedStationId || productsQuery.isPending}
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus />
+            Добавить игру
+          </Button>
+          <Button
+            variant="outline"
             disabled={stations.length < 2 || !selectedStationId}
             onClick={() => setCopyOpen(true)}
           >
@@ -477,6 +491,13 @@ export function GamesPage() {
         productId={editingProductId}
         onOpenChange={(open) => !open && setEditingProductId('')}
       />
+      <AddGameDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        stationId={selectedStationId}
+        stationName={selectedStation?.name}
+        products={productsQuery.data ?? []}
+      />
       <GameCopyDialog
         open={copyOpen}
         onOpenChange={setCopyOpen}
@@ -485,6 +506,191 @@ export function GamesPage() {
       />
     </div>
   );
+}
+
+function AddGameDialog({
+  open,
+  onOpenChange,
+  stationId,
+  stationName,
+  products,
+}: {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  stationId: string;
+  stationName?: string;
+  products: GameSummary[];
+}) {
+  const { api, mode } = useMerchant();
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [addedIds, setAddedIds] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      setSearch('');
+      setAddedIds([]);
+      setError('');
+      setSuccess('');
+    }
+  }, [open]);
+
+  const catalogQuery = useQuery({
+    queryKey: ['catalog', mode],
+    queryFn: () => api.getCatalog(),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const existingIds = useMemo(
+    () => new Set([...products.map((item) => item.productId), ...addedIds]),
+    [products, addedIds],
+  );
+  const candidates = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase('ru');
+    return (catalogQuery.data ?? [])
+      .filter((item) => !existingIds.has(item.productId))
+      .filter((item) => {
+        const title =
+          `${item.displayName ?? ''} ${item.title}`.toLocaleLowerCase('ru');
+        return !needle || title.includes(needle);
+      })
+      .sort((left, right) =>
+        productTitle(left).localeCompare(productTitle(right), 'ru'),
+      )
+      .slice(0, 100);
+  }, [catalogQuery.data, existingIds, search]);
+
+  const addMutation = useMutation({
+    retry: 0,
+    mutationFn: async (product: CatalogProduct) => {
+      await api.addProduct(stationId, product.productId);
+      const readback = await api.getProduct(stationId, product.productId);
+      if (readback.productId !== product.productId)
+        throw new Error('Drova не подтвердил добавление игры.');
+      return { product, readback };
+    },
+    onMutate: () => {
+      setError('');
+      setSuccess('');
+    },
+    onSuccess: async ({ product }) => {
+      setAddedIds((current) => [...current, product.productId]);
+      setSuccess(`«${productTitle(product)}» добавлена на станцию.`);
+      await queryClient.invalidateQueries({
+        queryKey: ['products', mode, stationId],
+      });
+      await queryClient.invalidateQueries({ queryKey: ['stations', mode] });
+      await queryClient.invalidateQueries({
+        queryKey: ['station-game-counts', mode],
+      });
+    },
+    onError: (caught) =>
+      setError(
+        caught instanceof Error ? caught.message : 'Не удалось добавить игру.',
+      ),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Добавить игру</DialogTitle>
+          <DialogDescription>
+            {stationName ?? 'Выбранная станция'} · игра добавляется со
+            стандартными настройками.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+            placeholder="Название игры"
+          />
+        </div>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {success && (
+          <Alert>
+            <Check />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+        <div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
+          {catalogQuery.isPending ? (
+            [0, 1, 2, 3, 4].map((item) => (
+              <Skeleton key={item} className="h-14 w-full" />
+            ))
+          ) : catalogQuery.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Не удалось загрузить каталог Drova.
+              </AlertDescription>
+            </Alert>
+          ) : candidates.length ? (
+            candidates.map((product) => {
+              const pending =
+                addMutation.isPending &&
+                addMutation.variables?.productId === product.productId;
+              return (
+                <div
+                  key={product.productId}
+                  className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {productTitle(product)}
+                    </p>
+                    {product.displayName &&
+                      product.displayName !== product.title && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {product.title}
+                        </p>
+                      )}
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={addMutation.isPending}
+                    onClick={() => addMutation.mutate(product)}
+                  >
+                    {pending ? 'Добавляем…' : 'Добавить'}
+                  </Button>
+                </div>
+              );
+            })
+          ) : (
+            <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              Подходящих игр нет.
+            </p>
+          )}
+        </div>
+        {candidates.length === 100 && (
+          <p className="text-xs text-muted-foreground">
+            Показаны первые 100 результатов — уточните поиск.
+          </p>
+        )}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={addMutation.isPending}
+            onClick={() => onOpenChange(false)}
+          >
+            Закрыть
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function productTitle(product: CatalogProduct) {
+  return product.displayName?.trim() || product.title;
 }
 
 function GameEditDialog({
@@ -949,9 +1155,7 @@ function TargetDiff({ target }: { target: GameSyncTargetPlan }) {
             <DiffGameRow
               key={item.update.productId}
               title={item.title}
-              note={
-                `${item.update.enabled ? 'Добавить включённой' : 'Добавить выключенной'} · ${item.settingsChanges.length ? `скопировать свои настройки: ${item.settingsChanges.map((change) => overrideLabels[change.key]).join(', ')}` : 'стандартные настройки'}`
-              }
+              note={`${item.update.enabled ? 'Добавить включённой' : 'Добавить выключенной'} · ${item.settingsChanges.length ? `скопировать свои настройки: ${item.settingsChanges.map((change) => overrideLabels[change.key]).join(', ')}` : 'стандартные настройки'}`}
             />
           ))}
         </DiffGroup>

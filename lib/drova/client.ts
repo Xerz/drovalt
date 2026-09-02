@@ -1,7 +1,9 @@
 import {
   accountSchema,
+  catalogProductSchema,
   gameDetailSchema,
   gameSummarySchema,
+  merchantSessionListSchema,
   stationSchema,
   unpaidStatsSchema,
   usageSchema,
@@ -63,6 +65,12 @@ export function createLiveApi(token: string): DrovaApi {
     async getAccount() {
       return accountSchema.parse(await request('/accounting/myaccount'));
     },
+    async getCatalog() {
+      return gameSafeArray(
+        catalogProductSchema,
+        await request('/product-manager/product/listfull2?limit=2000'),
+      );
+    },
     async getStations(merchantId) {
       const query = new URLSearchParams({ user_id: merchantId });
       return gameSafeArray(
@@ -77,6 +85,13 @@ export function createLiveApi(token: string): DrovaApi {
           `/server-manager/servers/${encodeURIComponent(serverId)}?${query}`,
         ),
       );
+    },
+    async getLatestSession(serverId) {
+      const query = new URLSearchParams({ server_id: serverId, limit: '1' });
+      const result = merchantSessionListSchema.parse(
+        await request(`/session-manager/sessions?${query}`),
+      );
+      return result.sessions[0] ?? null;
     },
     async setStationFlag(serverId, flag, target) {
       const paths: Record<StationFlag, string> = {
@@ -173,15 +188,20 @@ export function toProductUpdateRequest(
   return {
     server_id: serverId,
     product_id: update.productId,
-    // The edit read returns a number, while the merchant UI serializes this
-    // field as a JSON string for the update DTO.
-    verified: String(update.verified),
+    verified: toVerifiedWriteState(update.verified),
     enabled: update.enabled,
     game_path: update.gamePath,
     work_path: update.workPath,
     allowed_paths: update.allowedPaths,
     args: update.args,
   };
+}
+
+export function toVerifiedWriteState(verified: number) {
+  if (verified === 2) return 'READY';
+  throw new DrovaApiError(
+    'Drova вернул неизвестное состояние проверки игры. Изменение отменено.',
+  );
 }
 
 export function toStationApiTarget(flag: StationFlag, checked: boolean) {
