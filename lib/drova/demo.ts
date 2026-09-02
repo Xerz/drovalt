@@ -25,18 +25,27 @@ const initialStations: Station[] = [
   {
     uuid: 'demo-station-01',
     name: 'Северная · RTX 4080',
-    description: '<h3>Стабильная станция для 4K</h3><p>Быстрый NVMe, проводное подключение и свежие драйверы.</p><ul><li>До 120 FPS</li><li>Геймпад поддерживается</li></ul>',
+    description:
+      '<h3>Стабильная станция для 4K</h3><p>Быстрый NVMe, проводное подключение и свежие драйверы.</p><ul><li>До 120 FPS</li><li>Геймпад поддерживается</li></ul>',
     last_heartbeat: now - 18_000,
     published: true,
     allow_desktop: false,
     disable_updates: false,
     state: 'READY',
-    product_list: ['game-01', 'game-02', 'game-03', 'game-04', 'game-05', 'game-06'],
+    product_list: [
+      'game-01',
+      'game-02',
+      'game-03',
+      'game-04',
+      'game-05',
+      'game-06',
+    ],
   },
   {
     uuid: 'demo-station-02',
     name: 'Орбита · RTX 4070 Ti',
-    description: '<h3>Игровая станция «Орбита»</h3><p>Оптимальный профиль для соревновательных игр.</p>',
+    description:
+      '<h3>Игровая станция «Орбита»</h3><p>Оптимальный профиль для соревновательных игр.</p>',
     last_heartbeat: now - 112_000,
     published: true,
     allow_desktop: true,
@@ -47,7 +56,8 @@ const initialStations: Station[] = [
   {
     uuid: 'demo-station-03',
     name: 'Резервная · RTX 3070',
-    description: '<p>Резервный узел. Публикуется после технического обслуживания.</p>',
+    description:
+      '<p>Резервный узел. Публикуется после технического обслуживания.</p>',
     last_heartbeat: now - 3 * 3_600_000,
     published: false,
     allow_desktop: false,
@@ -58,17 +68,69 @@ const initialStations: Station[] = [
 ];
 
 const catalog = {
-  'game-01': ['Cyberpunk 2077', 'C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe', 'C:\\Games\\Cyberpunk 2077', '', '-launcher-skip'],
-  'game-02': ['Dota 2', 'C:\\Program Files (x86)\\Steam\\Steam.exe', 'C:\\Program Files (x86)\\Steam', '', '-applaunch 570'],
-  'game-03': ['Baldur’s Gate 3', 'C:\\Games\\Baldurs Gate 3\\bin\\bg3_dx11.exe', 'C:\\Games\\Baldurs Gate 3', '', '--skip-launcher'],
-  'game-04': ['Forza Horizon 5', 'C:\\XboxGames\\Forza Horizon 5\\Content\\ForzaHorizon5.exe', 'C:\\XboxGames\\Forza Horizon 5\\Content', '', ''],
-  'game-05': ['Hades II', 'C:\\Games\\Hades II\\Ship\\Hades2.exe', 'C:\\Games\\Hades II', '', ''],
-  'game-06': ['Marvel Rivals', 'C:\\Program Files (x86)\\Steam\\Steam.exe', 'C:\\Program Files (x86)\\Steam', '', '-applaunch 2767030'],
-  'game-07': ['War Thunder', 'C:\\Games\\War Thunder\\launcher.exe', 'C:\\Games\\War Thunder', '', ''],
-  'game-08': ['The Witcher 3', 'C:\\Games\\The Witcher 3\\bin\\x64_dx12\\witcher3.exe', 'C:\\Games\\The Witcher 3', '', ''],
+  'game-01': [
+    'Cyberpunk 2077',
+    'C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe',
+    'C:\\Games\\Cyberpunk 2077',
+    '',
+    '-launcher-skip',
+  ],
+  'game-02': [
+    'Dota 2',
+    'C:\\Program Files (x86)\\Steam\\Steam.exe',
+    'C:\\Program Files (x86)\\Steam',
+    '',
+    '-applaunch 570',
+  ],
+  'game-03': [
+    'Baldur’s Gate 3',
+    'C:\\Games\\Baldurs Gate 3\\bin\\bg3_dx11.exe',
+    'C:\\Games\\Baldurs Gate 3',
+    '',
+    '--skip-launcher',
+  ],
+  'game-04': [
+    'Forza Horizon 5',
+    'C:\\XboxGames\\Forza Horizon 5\\Content\\ForzaHorizon5.exe',
+    'C:\\XboxGames\\Forza Horizon 5\\Content',
+    '',
+    '',
+  ],
+  'game-05': [
+    'Hades II',
+    'C:\\Games\\Hades II\\Ship\\Hades2.exe',
+    'C:\\Games\\Hades II',
+    '',
+    '',
+  ],
+  'game-06': [
+    'Marvel Rivals',
+    'C:\\Program Files (x86)\\Steam\\Steam.exe',
+    'C:\\Program Files (x86)\\Steam',
+    '',
+    '-applaunch 2767030',
+  ],
+  'game-07': [
+    'War Thunder',
+    'C:\\Games\\War Thunder\\launcher.exe',
+    'C:\\Games\\War Thunder',
+    '',
+    '',
+  ],
+  'game-08': [
+    'The Witcher 3',
+    'C:\\Games\\The Witcher 3\\bin\\x64_dx12\\witcher3.exe',
+    'C:\\Games\\The Witcher 3',
+    '',
+    '',
+  ],
 } satisfies Record<string, [string, string, string, string, string]>;
 
-function detail(productId: keyof typeof catalog, enabled = true, override = false): GameDetail {
+function detail(
+  productId: keyof typeof catalog,
+  enabled = true,
+  override = false,
+): GameDetail {
   const [title, gamePath, workPath, allowedPaths, args] = catalog[productId];
   return {
     productId,
@@ -89,29 +151,80 @@ function detail(productId: keyof typeof catalog, enabled = true, override = fals
 }
 
 const initialProducts: Record<string, GameDetail[]> = {
-  'demo-station-01': [detail('game-01', true, true), detail('game-02'), detail('game-03'), detail('game-04'), detail('game-05'), detail('game-06')],
-  'demo-station-02': [detail('game-01'), detail('game-02', false), detail('game-03'), detail('game-07')],
-  'demo-station-03': [detail('game-01'), detail('game-04', false), detail('game-07'), detail('game-08')],
+  'demo-station-01': [
+    detail('game-01', true, true),
+    detail('game-02'),
+    detail('game-03'),
+    detail('game-04'),
+    detail('game-05'),
+    detail('game-06'),
+  ],
+  'demo-station-02': [
+    detail('game-01'),
+    detail('game-02', false),
+    detail('game-03'),
+    detail('game-07'),
+  ],
+  'demo-station-03': [
+    detail('game-01'),
+    detail('game-04', false),
+    detail('game-07'),
+    detail('game-08'),
+  ],
 };
 
 const demoCatalog: CatalogProduct[] = Object.entries(catalog).map(
   ([productId, [title]]) => ({ productId, title, displayName: title }),
 );
 
-const demoLatestSessions: Record<string, MerchantSession | null> = {
-  'demo-station-01': {
-    product_id: 'game-01',
-    status: 'FINISHED',
-    created_on: now - 28 * 60_000,
-    finished_on: now - 12 * 60_000,
-  },
-  'demo-station-02': {
+const demoSessions = makeDemoSessions();
+
+function makeDemoSessions(): MerchantSession[] {
+  const sessions: MerchantSession[] = [];
+  const products = Object.keys(catalog);
+  const billing = ['prepaid', 'subscription'] as const;
+  for (let day = 0; day < 215; day += 1) {
+    const dailyCount = day % 5 === 0 ? 3 : day % 2 === 0 ? 2 : 1;
+    for (let index = 0; index < dailyCount; index += 1) {
+      const stationIndex = (day + index) % initialStations.length;
+      const created = now - day * 86_400_000 - (9 + index * 4) * 3_600_000;
+      const duration = (18 + ((day * 17 + index * 23) % 165)) * 60_000;
+      sessions.push({
+        uuid: `demo-session-${day}-${index}`,
+        client_id: `demo-client-${String(((day + index * 7) % 31) + 1).padStart(3, '0')}`,
+        server_id: initialStations[stationIndex].uuid,
+        merchant_id: initialAccount.uuid,
+        product_id: products[(day * 3 + index) % products.length],
+        status: day % 19 === 0 ? 'ABORTED' : 'FINISHED',
+        created_on: created,
+        finished_on: created + duration,
+        creator_ip: `203.0.113.${((day + index) % 220) + 10}`,
+        billing_type: billing[(day + index) % billing.length],
+        score: 55 + ((day + index * 11) % 46),
+        score_reason: day % 19 === 0 ? 'short_session' : 'normal',
+        score_text:
+          day % 19 === 0
+            ? 'Сессия завершена раньше обычного'
+            : 'Стабильная сессия',
+        abort_comment: day % 19 === 0 ? 'Демо-завершение' : null,
+      });
+    }
+  }
+  sessions.unshift({
+    uuid: 'demo-session-active',
+    client_id: 'demo-client-007',
+    server_id: 'demo-station-02',
+    merchant_id: initialAccount.uuid,
     product_id: 'game-02',
     status: 'ACTIVE',
     created_on: now - 9 * 60_000,
-  },
-  'demo-station-03': null,
-};
+    creator_ip: '203.0.113.77',
+    billing_type: 'subscription',
+    score: 88,
+    score_text: 'Сессия продолжается',
+  });
+  return sessions.sort((a, b) => b.created_on - a.created_on);
+}
 
 function summary(value: GameDetail): GameSummary {
   return {
@@ -121,7 +234,8 @@ function summary(value: GameDetail): GameSummary {
     enabled: value.enabled,
     verified: value.verified,
     available: value.available,
-    useDefaultDesktop: !value.gamePath && !value.workPath && !value.allowedPaths && !value.args,
+    useDefaultDesktop:
+      !value.gamePath && !value.workPath && !value.allowedPaths && !value.args,
     needVpn: false,
   };
 }
@@ -151,8 +265,16 @@ function makePeriod(rows: Array<[string, number, number, number]>) {
       {
         totalStat: { sessionCount, totalMsecs, totalIncome },
         perGameStats: {
-          'game-01': { sessionCount: Math.ceil(sessionCount * 0.45), totalMsecs: Math.ceil(totalMsecs * 0.5), totalIncome: Math.ceil(totalIncome * 0.48) },
-          'game-02': { sessionCount: Math.floor(sessionCount * 0.3), totalMsecs: Math.floor(totalMsecs * 0.28), totalIncome: Math.floor(totalIncome * 0.31) },
+          'game-01': {
+            sessionCount: Math.ceil(sessionCount * 0.45),
+            totalMsecs: Math.ceil(totalMsecs * 0.5),
+            totalIncome: Math.ceil(totalIncome * 0.48),
+          },
+          'game-02': {
+            sessionCount: Math.floor(sessionCount * 0.3),
+            totalMsecs: Math.floor(totalMsecs * 0.28),
+            totalIncome: Math.floor(totalIncome * 0.31),
+          },
         },
       },
     ]),
@@ -191,18 +313,47 @@ export function createDemoApi(): DrovaApi {
       if (!station) throw new Error('Станция не найдена.');
       return pause(station);
     },
-    getLatestSession: (serverId) => pause(demoLatestSessions[serverId] ?? null),
-    setStationFlag: async (serverId: string, flag: StationFlag, target: boolean) => {
+    getSessions: ({ serverId, limit = 1000 } = {}) =>
+      pause(
+        (serverId
+          ? demoSessions.filter((session) => session.server_id === serverId)
+          : demoSessions.slice(0, 72)
+        ).slice(0, limit),
+      ),
+    getServerNames: (serverIds) =>
+      pause(
+        Object.fromEntries(
+          initialStations
+            .filter((station) => serverIds.includes(station.uuid))
+            .map((station) => [station.uuid, station.name]),
+        ),
+      ),
+    getLatestSession: (serverId) =>
+      pause(
+        demoSessions.find((session) => session.server_id === serverId) ?? null,
+      ),
+    setStationFlag: async (
+      serverId: string,
+      flag: StationFlag,
+      target: boolean,
+    ) => {
       await wait();
-      stations = stations.map((station) => station.uuid === serverId ? { ...station, [flag]: target } : station);
+      stations = stations.map((station) =>
+        station.uuid === serverId ? { ...station, [flag]: target } : station,
+      );
     },
     updateStation: async (serverId, name, description) => {
       await wait();
-      stations = stations.map((station) => station.uuid === serverId ? { ...station, name, description } : station);
+      stations = stations.map((station) =>
+        station.uuid === serverId ? { ...station, name, description } : station,
+      );
     },
-    getProducts: async (serverId) => pause((products[serverId] ?? []).map(summary)),
+    getProducts: async (serverId) =>
+      pause((products[serverId] ?? []).map(summary)),
     getProduct: async (serverId, productId) => {
-      const product = products[serverId]?.find((item) => item.productId === productId);
+      const product = products[serverId]?.find(
+        (item) => item.productId === productId,
+      );
       if (!product) throw new Error('Игра не найдена на станции.');
       return pause(product);
     },
@@ -222,9 +373,11 @@ export function createDemoApi(): DrovaApi {
         args: null,
         enabled: true,
       });
-      stations = stations.map((station) => station.uuid === serverId
-        ? { ...station, product_list: list.map((item) => item.productId) }
-        : station);
+      stations = stations.map((station) =>
+        station.uuid === serverId
+          ? { ...station, product_list: list.map((item) => item.productId) }
+          : station,
+      );
     },
     deleteProduct: async (serverId, productId) => {
       await wait();
@@ -232,9 +385,11 @@ export function createDemoApi(): DrovaApi {
       const index = list.findIndex((item) => item.productId === productId);
       if (index < 0) throw new Error('Игра не найдена на станции.');
       list.splice(index, 1);
-      stations = stations.map((station) => station.uuid === serverId
-        ? { ...station, product_list: list.map((item) => item.productId) }
-        : station);
+      stations = stations.map((station) =>
+        station.uuid === serverId
+          ? { ...station, product_list: list.map((item) => item.productId) }
+          : station,
+      );
     },
     updateProduct: async (serverId, update: ProductUpdate) => {
       await wait();
@@ -245,7 +400,9 @@ export function createDemoApi(): DrovaApi {
     },
     setProductEnabled: async (serverId, productId, target) => {
       await wait();
-      const product = products[serverId]?.find((item) => item.productId === productId);
+      const product = products[serverId]?.find(
+        (item) => item.productId === productId,
+      );
       if (!product) throw new Error('Игра не найдена на станции.');
       product.enabled = target;
     },

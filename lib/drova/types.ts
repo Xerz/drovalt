@@ -36,6 +36,7 @@ export const catalogProductSchema = z.object({
   productId: z.string(),
   title: z.string(),
   displayName: z.string().optional(),
+  useDefaultDesktop: z.boolean().nullable().optional(),
 });
 
 const nullableText = z.string().nullable();
@@ -91,12 +92,24 @@ export const prepaidStatsSchema = z.object({
   balance: z.number().nullable().optional(),
 });
 
-export const merchantSessionSchema = z.object({
-  product_id: z.string().nullable().optional(),
-  status: z.string(),
-  created_on: z.number(),
-  finished_on: z.number().nullable().optional(),
-});
+export const merchantSessionSchema = z
+  .object({
+    uuid: z.string().optional(),
+    client_id: z.string().nullable().optional(),
+    server_id: z.string().nullable().optional(),
+    merchant_id: z.string().nullable().optional(),
+    product_id: z.string().nullable().optional(),
+    status: z.string(),
+    created_on: z.number(),
+    finished_on: z.number().nullable().optional(),
+    creator_ip: z.string().nullable().optional(),
+    billing_type: z.string().nullable().optional(),
+    score: z.union([z.number(), z.string()]).nullable().optional(),
+    score_reason: z.string().nullable().optional(),
+    score_text: z.string().nullable().optional(),
+    abort_comment: z.string().nullable().optional(),
+  })
+  .catchall(z.unknown());
 
 export const merchantSessionListSchema = z.object({
   sessions: z.array(merchantSessionSchema).default([]),
@@ -127,11 +140,18 @@ export type ProductUpdate = ProductOverrides & {
   enabled: boolean;
 };
 
+export type SessionQuery = {
+  serverId?: string;
+  limit?: number;
+};
+
 export interface DrovaApi {
   getAccount(): Promise<Account>;
   getCatalog(): Promise<CatalogProduct[]>;
   getStations(merchantId: string): Promise<Station[]>;
   getStation(serverId: string, merchantId: string): Promise<Station>;
+  getSessions(query?: SessionQuery): Promise<MerchantSession[]>;
+  getServerNames(serverIds: string[]): Promise<Record<string, string>>;
   getLatestSession(serverId: string): Promise<MerchantSession | null>;
   setStationFlag(
     serverId: string,

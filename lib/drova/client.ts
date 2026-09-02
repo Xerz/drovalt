@@ -88,12 +88,34 @@ export function createLiveApi(token: string): DrovaApi {
         ),
       );
     },
+    async getSessions({ serverId, limit = 1000 } = {}) {
+      const query = new URLSearchParams({ limit: String(limit) });
+      if (serverId) query.set('server_id', serverId);
+      return merchantSessionListSchema.parse(
+        await request(`/session-manager/sessions?${query}`),
+      ).sessions;
+    },
+    async getServerNames(serverIds) {
+      if (!serverIds.length) return {};
+      const value = await request('/server-manager/servers/server_names', {
+        method: 'POST',
+        body: JSON.stringify(serverIds),
+      });
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new DrovaApiError('Drova вернул неожиданный список станций.');
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      );
+    },
     async getLatestSession(serverId) {
       const query = new URLSearchParams({ server_id: serverId, limit: '1' });
-      const result = merchantSessionListSchema.parse(
-        await request(`/session-manager/sessions?${query}`),
+      return (
+        merchantSessionListSchema.parse(
+          await request(`/session-manager/sessions?${query}`),
+        ).sessions[0] ?? null
       );
-      return result.sessions[0] ?? null;
     },
     async setStationFlag(serverId, flag, target) {
       const paths: Record<StationFlag, string> = {
