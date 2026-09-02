@@ -27,6 +27,8 @@ export class DrovaApiError extends Error {
 function errorMessage(status: number) {
   if (status === 401 || status === 403)
     return 'Токен не принят Drova. Замените его в настройках.';
+  if (status === 429)
+    return 'Drova ограничил частоту запросов. Подождите немного и повторите копирование.';
   if (status >= 500)
     return 'Drova временно не отвечает. Попробуйте обновить данные позже.';
   return `Drova вернул ошибку ${status}.`;

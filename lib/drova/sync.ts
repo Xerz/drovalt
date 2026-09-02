@@ -1,5 +1,7 @@
 import type { DrovaApi, GameDetail, GameSummary, ProductUpdate } from './types';
 
+export const GAME_SYNC_MIN_INTERVAL_MS = 350;
+
 export type SyncUpsert = {
   kind: 'add' | 'update';
   title: string;
@@ -77,6 +79,46 @@ export async function mapLimited<T, R>(
   return results;
 }
 
+/**
+ * Keeps every product request in one queue. Mutations are never retried: a
+ * rejected operation is returned to the sync state machine as-is.
+ */
+export function createGameRequestLimitedApi(
+  api: DrovaApi,
+  minIntervalMs = GAME_SYNC_MIN_INTERVAL_MS,
+): DrovaApi {
+  let queue: Promise<void> = Promise.resolve();
+  let nextStartAt = 0;
+
+  const schedule = <T>(operation: () => Promise<T>) => {
+    const scheduled = queue.then(async () => {
+      const waitMs = Math.max(0, nextStartAt - Date.now());
+      if (waitMs > 0)
+        await new Promise((resolve) => globalThis.setTimeout(resolve, waitMs));
+      nextStartAt = Date.now() + Math.max(0, minIntervalMs);
+      return operation();
+    });
+    queue = scheduled.then(
+      () => undefined,
+      () => undefined,
+    );
+    return scheduled;
+  };
+
+  return {
+    ...api,
+    getProducts: (serverId) => schedule(() => api.getProducts(serverId)),
+    getProduct: (serverId, productId) =>
+      schedule(() => api.getProduct(serverId, productId)),
+    addProduct: (serverId, productId) =>
+      schedule(() => api.addProduct(serverId, productId)),
+    updateProduct: (serverId, update) =>
+      schedule(() => api.updateProduct(serverId, update)),
+    setProductEnabled: (serverId, productId, target) =>
+      schedule(() => api.setProductEnabled(serverId, productId, target)),
+  };
+}
+
 export async function buildGameSyncPlan(
   api: DrovaApi,
   sourceStationId: string,
@@ -86,7 +128,7 @@ export async function buildGameSyncPlan(
   const sourceProducts = await api.getProducts(sourceStationId);
   const targetProducts = await mapLimited(
     targetStations,
-    4,
+    1,
     async (station) => ({
       station,
       products: await api.getProducts(station.id),
@@ -105,7 +147,7 @@ export async function buildGameSyncPlan(
   const report = (label: string) =>
     onProgress?.({ completed, total: Math.max(1, detailReads), label });
 
-  const sourceDetails = await mapLimited(sourceProducts, 6, async (product) => {
+  const sourceDetails = await mapLimited(sourceProducts, 1, async (product) => {
     const value = await api.getProduct(sourceStationId, product.productId);
     completed += 1;
     report(value.title);
@@ -117,11 +159,11 @@ export async function buildGameSyncPlan(
 
   const targets = await mapLimited(
     targetProducts,
-    2,
+    1,
     async ({ station, products }) => {
       const targetDetails = await mapLimited(
         products.filter((item) => sourceById.has(item.productId)),
-        6,
+        1,
         async (product) => {
           const value = await api.getProduct(station.id, product.productId);
           completed += 1;

@@ -1,14 +1,48 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDemoApi } from '@/lib/drova/demo';
 import {
   buildGameSyncPlan,
+  createGameRequestLimitedApi,
   executeGameSyncPlan,
   GameSyncExecutionError,
   syncPlanCounts,
 } from '@/lib/drova/sync';
 
 describe('game synchronization', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('runs all product requests in one rate-limited queue', async () => {
+    vi.useFakeTimers();
+    const base = createDemoApi();
+    const starts: number[] = [];
+    const api = {
+      ...base,
+      async getProducts() {
+        starts.push(Date.now());
+        return [];
+      },
+    };
+    const limited = createGameRequestLimitedApi(api, 100);
+    const pending = [
+      limited.getProducts('station-a'),
+      limited.getProducts('station-b'),
+      limited.getProducts('station-c'),
+    ];
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(starts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(99);
+    expect(starts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(starts).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(starts).toHaveLength(3);
+    await Promise.all(pending);
+    expect(starts[1] - starts[0]).toBeGreaterThanOrEqual(100);
+    expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(100);
+  });
+
   it('previews additions, updates, toggles and disables before writing', async () => {
     const api = createDemoApi();
     const plan = await buildGameSyncPlan(api, 'demo-station-01', [

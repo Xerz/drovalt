@@ -70,7 +70,9 @@ import type {
 } from '@/lib/drova/types';
 import {
   buildGameSyncPlan,
+  createGameRequestLimitedApi,
   executeGameSyncPlan,
+  GAME_SYNC_MIN_INTERVAL_MS,
   syncPlanCounts,
   type GameSyncPlan,
   type GameSyncTargetPlan,
@@ -897,6 +899,10 @@ function GameCopyDialog({
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [error, setError] = useState('');
   const [result, setResult] = useState('');
+  const syncApi = useMemo(
+    () => (mode === 'live' ? createGameRequestLimitedApi(api) : api),
+    [api, mode],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -916,7 +922,7 @@ function GameCopyDialog({
     setProgress({ completed: 0, total: 1, label: 'Собираем списки игр' });
     try {
       const nextPlan = await buildGameSyncPlan(
-        api,
+        syncApi,
         source.uuid,
         targets
           .filter((station) => targetIds.includes(station.uuid))
@@ -940,7 +946,7 @@ function GameCopyDialog({
     setResult('');
     setProgress({ completed: 0, total: 1, label: 'Начинаем синхронизацию' });
     try {
-      const completed = await executeGameSyncPlan(api, plan, setProgress);
+      const completed = await executeGameSyncPlan(syncApi, plan, setProgress);
       setResult(
         `Готово: ${completed.length} ${completed.length === 1 ? 'станция обновлена' : 'станции обновлены'}.`,
       );
@@ -966,7 +972,10 @@ function GameCopyDialog({
           <DialogTitle>Скопировать список игр</DialogTitle>
           <DialogDescription>
             Источник: {source?.name}. Лишние игры на целевых станциях будут
-            отключены, но не удалены.
+            отключены, но не удалены.{' '}
+            {mode === 'live'
+              ? `Игровые запросы идут строго по одному с паузой не менее ${GAME_SYNC_MIN_INTERVAL_MS} мс.`
+              : 'Игровые запросы идут строго по одному.'}
           </DialogDescription>
         </DialogHeader>
         {!plan && !result && (
