@@ -6,6 +6,7 @@ import {
   unpaidStatsSchema,
   usageSchema,
   type DrovaApi,
+  type ProductUpdate,
   type StationFlag,
 } from './types';
 
@@ -22,8 +23,10 @@ export class DrovaApiError extends Error {
 }
 
 function errorMessage(status: number) {
-  if (status === 401 || status === 403) return 'Токен не принят Drova. Замените его в настройках.';
-  if (status >= 500) return 'Drova временно не отвечает. Попробуйте обновить данные позже.';
+  if (status === 401 || status === 403)
+    return 'Токен не принят Drova. Замените его в настройках.';
+  if (status >= 500)
+    return 'Drova временно не отвечает. Попробуйте обновить данные позже.';
   return `Drova вернул ошибку ${status}.`;
 }
 
@@ -32,7 +35,8 @@ export function createLiveApi(token: string): DrovaApi {
     const headers = new Headers(init.headers);
     headers.set('Accept', 'application/json');
     headers.set('X-Auth-Token', token);
-    if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+    if (init.body !== undefined)
+      headers.set('Content-Type', 'application/json');
 
     let response: Response;
     try {
@@ -44,9 +48,12 @@ export function createLiveApi(token: string): DrovaApi {
         referrerPolicy: 'no-referrer',
       });
     } catch {
-      throw new DrovaApiError('Не удалось связаться с Drova. Проверьте подключение и CORS.');
+      throw new DrovaApiError(
+        'Не удалось связаться с Drova. Проверьте подключение и CORS.',
+      );
     }
-    if (!response.ok) throw new DrovaApiError(errorMessage(response.status), response.status);
+    if (!response.ok)
+      throw new DrovaApiError(errorMessage(response.status), response.status);
     if (response.status === 204) return null;
     const text = await response.text();
     return text ? JSON.parse(text) : null;
@@ -58,11 +65,18 @@ export function createLiveApi(token: string): DrovaApi {
     },
     async getStations(merchantId) {
       const query = new URLSearchParams({ user_id: merchantId });
-      return gameSafeArray(stationSchema, await request(`/server-manager/servers?${query}`));
+      return gameSafeArray(
+        stationSchema,
+        await request(`/server-manager/servers?${query}`),
+      );
     },
     async getStation(serverId, merchantId) {
       const query = new URLSearchParams({ user_id: merchantId });
-      return stationSchema.parse(await request(`/server-manager/servers/${encodeURIComponent(serverId)}?${query}`));
+      return stationSchema.parse(
+        await request(
+          `/server-manager/servers/${encodeURIComponent(serverId)}?${query}`,
+        ),
+      );
     },
     async setStationFlag(serverId, flag, target) {
       const paths: Record<StationFlag, string> = {
@@ -70,10 +84,13 @@ export function createLiveApi(token: string): DrovaApi {
         allow_desktop: 'set_allow_desktop',
         disable_updates: 'set_disable_updates',
       };
-      await request(`/server-manager/servers/${encodeURIComponent(serverId)}/${paths[flag]}/${target}`, {
-        method: 'POST',
-        body: flag === 'published' ? undefined : '{}',
-      });
+      await request(
+        `/server-manager/servers/${encodeURIComponent(serverId)}/${paths[flag]}/${target}`,
+        {
+          method: 'POST',
+          body: flag === 'published' ? undefined : '{}',
+        },
+      );
     },
     async updateStation(serverId, name, description) {
       await request(`/server-manager/servers/${encodeURIComponent(serverId)}`, {
@@ -82,43 +99,56 @@ export function createLiveApi(token: string): DrovaApi {
       });
     },
     async getProducts(serverId) {
-      return gameSafeArray(gameSummarySchema, await request(`/server-manager/serverproduct/list4edit2/${encodeURIComponent(serverId)}`));
+      return gameSafeArray(
+        gameSummarySchema,
+        await request(
+          `/server-manager/serverproduct/list4edit2/${encodeURIComponent(serverId)}`,
+        ),
+      );
     },
     async getProduct(serverId, productId) {
-      return gameDetailSchema.parse(await request(`/server-manager/serverproduct/list4edit2/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}`));
+      return gameDetailSchema.parse(
+        await request(
+          `/server-manager/serverproduct/list4edit2/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}`,
+        ),
+      );
     },
     async updateProduct(serverId, update) {
       await request('/server-manager/serverproduct/update', {
         method: 'POST',
-        body: JSON.stringify({
-          server_id: serverId,
-          product_id: update.productId,
-          verified: update.verified,
-          enabled: update.enabled,
-          game_path: update.gamePath,
-          work_path: update.workPath,
-          allowed_paths: update.allowedPaths,
-          args: update.args,
-        }),
+        body: JSON.stringify(toProductUpdateRequest(serverId, update)),
       });
     },
     async setProductEnabled(serverId, productId, target) {
-      await request(`/server-manager/serverproduct/set_enabled/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}/${target}`, {
-        method: 'POST',
-        body: '{}',
-      });
+      await request(
+        `/server-manager/serverproduct/set_enabled/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}/${target}`,
+        {
+          method: 'POST',
+          body: '{}',
+        },
+      );
     },
     async getUsage() {
-      return usageSchema.parse(await request('/accounting/statistics/myserverusageprepared'));
+      return usageSchema.parse(
+        await request('/accounting/statistics/myserverusageprepared'),
+      );
     },
     async getUnpaidStats(merchantId) {
-      return unpaidStatsSchema.parse(await request(`/accounting/unpayedstats/${encodeURIComponent(merchantId)}`));
+      return unpaidStatsSchema.parse(
+        await request(
+          `/accounting/unpayedstats/${encodeURIComponent(merchantId)}`,
+        ),
+      );
     },
   };
 }
 
-function gameSafeArray<T>(schema: { parse(value: unknown): T }, value: unknown): T[] {
-  if (!Array.isArray(value)) throw new DrovaApiError('Drova вернул неожиданный формат данных.');
+function gameSafeArray<T>(
+  schema: { parse(value: unknown): T },
+  value: unknown,
+): T[] {
+  if (!Array.isArray(value))
+    throw new DrovaApiError('Drova вернул неожиданный формат данных.');
   return value.map((item) => schema.parse(item));
 }
 
@@ -129,6 +159,24 @@ export function assertMerchantRole(account: { roles: string[] }) {
 }
 
 export const DROVA_SERVICE_ORIGIN = SERVICE_ORIGIN;
+
+export function toProductUpdateRequest(
+  serverId: string,
+  update: ProductUpdate,
+) {
+  return {
+    server_id: serverId,
+    product_id: update.productId,
+    // The edit read returns a number, while the merchant UI serializes this
+    // field as a JSON string for the update DTO.
+    verified: String(update.verified),
+    enabled: update.enabled,
+    game_path: update.gamePath,
+    work_path: update.workPath,
+    allowed_paths: update.allowedPaths,
+    args: update.args,
+  };
+}
 
 export function toStationApiTarget(flag: StationFlag, checked: boolean) {
   return flag === 'disable_updates' ? !checked : checked;
