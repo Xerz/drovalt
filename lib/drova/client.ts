@@ -89,12 +89,14 @@ export function createLiveApi(token: string): DrovaApi {
         ),
       );
     },
-    async getMerchantSessions(merchantId, { limit = 600 } = {}) {
-      const query = new URLSearchParams({ limit: String(limit) });
+    async getSessions({ merchantId, serverId, limit = 1000 }) {
+      const query = new URLSearchParams({
+        merchant_id: merchantId,
+        limit: String(limit),
+      });
+      if (serverId) query.set('server_id', serverId);
       return merchantSessionResponseSchema.parse(
-        await request(
-          `/accounting/merchant_sessions/${encodeURIComponent(merchantId)}?${query}`,
-        ),
+        await request(`/session-manager/sessions?${query}`),
       );
     },
     async getServerNames(serverIds) {

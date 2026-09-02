@@ -189,16 +189,19 @@ describe('Drova client', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     await expect(
-      createLiveApi('private-token-value').getMerchantSessions('merchant-demo', {
-        limit: 600,
+      createLiveApi('private-token-value').getSessions({
+        merchantId: 'merchant-demo',
+        serverId: 'station-demo',
+        limit: 1000,
       }),
     ).resolves.toHaveLength(1);
-    expect(requestUrl(fetchMock.mock.calls[0][0])).toBe(
-      'https://services.drova.io/accounting/merchant_sessions/merchant-demo?limit=600',
-    );
-    expect(requestUrl(fetchMock.mock.calls[0][0])).not.toContain(
-      '/session-manager/sessions',
-    );
+    const url = new URL(requestUrl(fetchMock.mock.calls[0][0]));
+    expect(url.pathname).toBe('/session-manager/sessions');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      merchant_id: 'merchant-demo',
+      limit: '1000',
+      server_id: 'station-demo',
+    });
   });
 });
 

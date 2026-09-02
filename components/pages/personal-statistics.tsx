@@ -1,7 +1,8 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { Activity, Clock3, UsersRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { useMerchant } from '@/components/merchant-context';
 import {
   Table,
   TableBody,
@@ -33,7 +35,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useSessionData } from '@/hooks/use-session-data';
+import {
+  sessionDatasetQueryKey,
+  useSessionData,
+} from '@/hooks/use-session-data';
 import {
   billingSummary,
   buildAnalyticsSeries,
@@ -46,7 +51,13 @@ import {
   type AnalyticsPeriod,
   type BillingFilter,
 } from '@/lib/drova/personal-analytics';
-import { catalogNameMap } from '@/lib/drova/sessions';
+import {
+  catalogNameMap,
+  loadSessionHistory,
+  mergeSessionDataset,
+  type SessionDataset,
+  type SessionHistoryProgress,
+} from '@/lib/drova/sessions';
 
 const TIME_ZONE_KEY = 'drovalt.analyticsTimeZone.v1';
 const periods: Array<{ key: AnalyticsPeriod; label: string }> = [
@@ -73,17 +84,66 @@ const colors = [
 ];
 
 export function PersonalStatistics() {
+  const { api, account, mode } = useMerchant();
+  const queryClient = useQueryClient();
   const sessionsQuery = useSessionData();
   const [timeZone, setTimeZone] = useState('UTC');
   const [period, setPeriod] = useState<AnalyticsPeriod>('currentMonth');
   const [metric, setMetric] = useState<AnalyticsMetric>('absoluteUtilization');
   const [showAllStations, setShowAllStations] = useState(false);
+  const [fanoutProgress, setFanoutProgress] =
+    useState<SessionHistoryProgress | null>(null);
+  const [fanoutFailures, setFanoutFailures] = useState(0);
+  const fanoutRunning = useRef(false);
+  const fanoutStop = useRef(false);
+  const sessionDataRef = useRef(sessionsQuery.data);
+  sessionDataRef.current = sessionsQuery.data;
+  const sessionServerKey = (sessionsQuery.data?.serverIds ?? []).join('|');
 
   useEffect(() => {
     const browserZone =
       Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     setTimeZone(window.localStorage.getItem(TIME_ZONE_KEY) || browserZone);
   }, []);
+
+  useEffect(() => {
+    const sessionData = sessionDataRef.current;
+    if (!account || !sessionData || fanoutRunning.current) return;
+    const remaining = sessionData.serverIds.filter(
+      (id) => !sessionData.deepLoadedServerIds.includes(id),
+    );
+    if (!remaining.length) return;
+
+    fanoutRunning.current = true;
+    fanoutStop.current = false;
+    setFanoutFailures(0);
+    const key = sessionDatasetQueryKey(mode, account.uuid);
+    void loadSessionHistory(api, account.uuid, remaining, {
+      shouldStop: () => fanoutStop.current,
+      onProgress: setFanoutProgress,
+      onServerLoaded: (serverId, loaded) => {
+        queryClient.setQueryData<SessionDataset>(key, (current) =>
+          current ? mergeSessionDataset(current, loaded, [serverId]) : current,
+        );
+      },
+    })
+      .then((result) => {
+        setFanoutFailures(result.failedServerIds.length);
+        setFanoutProgress({
+          completed: result.completed,
+          total: result.total,
+          failedServerIds: result.failedServerIds,
+          stopped: result.stopped,
+        });
+      })
+      .finally(() => {
+        fanoutRunning.current = false;
+      });
+
+    return () => {
+      fanoutStop.current = true;
+    };
+  }, [account, api, mode, queryClient, sessionServerKey]);
 
   const prepared = useMemo(
     () => prepareAnalyticsSessions(sessionsQuery.data?.sessions ?? []),
@@ -204,7 +264,20 @@ export function PersonalStatistics() {
                     {sessionsQuery.data
                       ? formatTimestamp(sessionsQuery.data.updatedAt)
                       : '—'}
+                    {fanoutProgress && (
+                      <>
+                        {' '}
+                        · станции {fanoutProgress.completed}/
+                        {fanoutProgress.total}
+                      </>
+                    )}
                   </CardDescription>
+                  {fanoutFailures > 0 && (
+                    <p className="mt-1 text-xs text-destructive">
+                      Не удалось дочитать {fanoutFailures} станций; успешные
+                      результаты сохранены.
+                    </p>
+                  )}
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <Switch

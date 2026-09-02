@@ -27,6 +27,7 @@ import {
   ListPlus,
   RefreshCw,
   RotateCcw,
+  Square,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -53,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Progress, ProgressLabel } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -70,11 +72,11 @@ import { getGeoIp, type GeoIpResult } from '@/lib/drova/geoip';
 import { buildSessionCsv } from '@/lib/drova/session-csv';
 import {
   catalogNameMap,
-  loadMerchantSessionHistory,
-  MERCHANT_SESSION_EXPANDED_LIMIT,
+  loadSessionHistory,
   mergeSessionDataset,
   sessionDuration,
   type SessionDataset,
+  type SessionHistoryProgress,
 } from '@/lib/drova/sessions';
 import type { MerchantSession } from '@/lib/drova/types';
 
@@ -125,7 +127,10 @@ export function SessionsPage() {
   const [dateTo, setDateTo] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [historyError, setHistoryError] = useState('');
+  const [historyProgress, setHistoryProgress] =
+    useState<SessionHistoryProgress | null>(null);
+  const [historyFailures, setHistoryFailures] = useState<string[]>([]);
+  const stopRequested = useRef(false);
   const draggedColumn = useRef<string | null>(null);
   const [geoState, setGeoState] = useState<{
     status: 'idle' | 'loading' | 'ready' | 'partial' | 'error';
@@ -287,38 +292,45 @@ export function SessionsPage() {
     .getFilteredRowModel()
     .rows.map((row) => row.original);
   const totals = summarizeRows(activeRows);
-  const canLoadMore =
-    (sessionsQuery.data?.loadedLimit ?? 0) < MERCHANT_SESSION_EXPANDED_LIMIT;
+  const remainingServerIds = (sessionsQuery.data?.serverIds ?? []).filter(
+    (id) => !sessionsQuery.data?.deepLoadedServerIds.includes(id),
+  );
 
   const loadMore = async () => {
-    if (!sessionsQuery.data || !account || loadingMore || !canLoadMore) return;
+    if (!sessionsQuery.data || !account || loadingMore || !remainingServerIds.length)
+      return;
+    stopRequested.current = false;
     setLoadingMore(true);
-    setHistoryError('');
+    setHistoryFailures([]);
+    setHistoryProgress({
+      completed: 0,
+      total: remainingServerIds.length,
+      failedServerIds: [],
+      stopped: false,
+    });
     const key = sessionDatasetQueryKey(mode, account?.uuid);
-    try {
-      const loaded = await loadMerchantSessionHistory(
-        api,
-        account.uuid,
-        MERCHANT_SESSION_EXPANDED_LIMIT,
-      );
-      queryClient.setQueryData<SessionDataset>(key, (current) =>
-        current
-          ? mergeSessionDataset(
-              current,
-              loaded,
-              MERCHANT_SESSION_EXPANDED_LIMIT,
-            )
-          : current,
-      );
-    } catch (error) {
-      setHistoryError(
-        error instanceof Error
-          ? error.message
-          : 'Не удалось загрузить расширенную историю.',
-      );
-    } finally {
-      setLoadingMore(false);
-    }
+    const result = await loadSessionHistory(
+      api,
+      account.uuid,
+      remainingServerIds,
+      {
+        shouldStop: () => stopRequested.current,
+        onProgress: setHistoryProgress,
+        onServerLoaded: (serverId, loaded) => {
+          queryClient.setQueryData<SessionDataset>(key, (current) =>
+            current ? mergeSessionDataset(current, loaded, [serverId]) : current,
+          );
+        },
+      },
+    );
+    setHistoryFailures(result.failedServerIds);
+    setHistoryProgress({
+      completed: result.completed,
+      total: result.total,
+      failedServerIds: result.failedServerIds,
+      stopped: result.stopped,
+    });
+    setLoadingMore(false);
   };
 
   if (!account)
@@ -458,17 +470,27 @@ export function SessionsPage() {
                     <Download />
                     CSV
                   </Button>
-                  <Button
-                    onClick={() => void loadMore()}
-                    disabled={!canLoadMore || loadingMore}
-                  >
-                    {loadingMore ? (
-                      <RefreshCw className="animate-spin" />
-                    ) : (
+                  {loadingMore ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        stopRequested.current = true;
+                      }}
+                    >
+                      <Square />
+                      Остановить
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => void loadMore()}
+                      disabled={!remainingServerIds.length}
+                    >
                       <ListPlus />
-                    )}
-                    {canLoadMore ? 'Загрузить до 1000' : 'История загружена'}
-                  </Button>
+                      {remainingServerIds.length
+                        ? 'Загрузить ещё'
+                        : 'История загружена'}
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex flex-wrap items-end gap-2">
@@ -501,10 +523,34 @@ export function SessionsPage() {
                   </Button>
                 ))}
               </div>
-              {historyError && (
-                <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-                  {historyError}
-                </p>
+              {historyProgress && (
+                <div className="rounded-xl border bg-background p-3">
+                  <Progress
+                    value={
+                      historyProgress.total
+                        ? (historyProgress.completed / historyProgress.total) *
+                          100
+                        : 0
+                    }
+                  >
+                    <ProgressLabel>
+                      {historyProgress.stopped
+                        ? 'Загрузка остановлена'
+                        : loadingMore
+                          ? 'Загрузка истории по станциям'
+                          : 'Загрузка завершена'}
+                    </ProgressLabel>
+                    <span className="ml-auto text-sm tabular-nums text-muted-foreground">
+                      {historyProgress.completed}/{historyProgress.total}
+                    </span>
+                  </Progress>
+                  {historyFailures.length > 0 && (
+                    <p className="mt-2 text-xs text-destructive">
+                      Не удалось загрузить {historyFailures.length} станций. Они
+                      останутся доступны для повторной попытки.
+                    </p>
+                  )}
+                </div>
               )}
             </CardHeader>
 
