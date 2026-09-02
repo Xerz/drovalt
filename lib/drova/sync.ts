@@ -161,7 +161,9 @@ function compareTarget(
         kind: 'add',
         title: source.title,
         update: toUpdate(source, source.verified),
-        settingsChanges: [],
+        settingsChanges: overrideKeys
+          .filter((key) => source[key] !== null)
+          .map((key) => ({ key, before: null, after: source[key] })),
       });
       continue;
     }
@@ -265,7 +267,11 @@ export async function executeGameSyncPlan(
           total,
           label: `${target.stationName} · ${operation.title}`,
         });
-        await api.updateProduct(target.stationId, operation.update);
+        if (operation.kind === 'add') {
+          await addAndConfigureProduct(api, target.stationId, operation.update);
+        } else {
+          await api.updateProduct(target.stationId, operation.update);
+        }
         completed += 1;
       }
       for (const operation of target.toggles) {
@@ -313,6 +319,21 @@ export async function executeGameSyncPlan(
   }
   onProgress?.({ completed: total, total, label: 'Готово' });
   return completedStations;
+}
+
+async function addAndConfigureProduct(
+  api: DrovaApi,
+  stationId: string,
+  desired: ProductUpdate,
+) {
+  await api.addProduct(stationId, desired.productId);
+  const added = await api.getProduct(stationId, desired.productId);
+  const settingsDiffer = overrideKeys.some((key) => added[key] !== desired[key]);
+  if (settingsDiffer) {
+    await api.updateProduct(stationId, { ...desired, verified: added.verified });
+  } else if (added.enabled !== desired.enabled) {
+    await api.setProductEnabled(stationId, desired.productId, desired.enabled);
+  }
 }
 
 async function verifyTarget(api: DrovaApi, target: GameSyncTargetPlan) {

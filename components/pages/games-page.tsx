@@ -934,7 +934,7 @@ function TargetDiff({ target }: { target: GameSyncTargetPlan }) {
         </div>
         <Badge variant={operationCount ? 'secondary' : 'outline'}>
           {operationCount
-            ? `${operationCount} запросов изменения`
+            ? `${operationCount} игр затронуто`
             : 'Уже синхронизировано'}
         </Badge>
       </div>
@@ -950,9 +950,7 @@ function TargetDiff({ target }: { target: GameSyncTargetPlan }) {
               key={item.update.productId}
               title={item.title}
               note={
-                item.update.enabled
-                  ? 'Добавить включённой'
-                  : 'Добавить выключенной'
+                `${item.update.enabled ? 'Добавить включённой' : 'Добавить выключенной'} · ${item.settingsChanges.length ? `скопировать свои настройки: ${item.settingsChanges.map((change) => overrideLabels[change.key]).join(', ')}` : 'стандартные настройки'}`
               }
             />
           ))}

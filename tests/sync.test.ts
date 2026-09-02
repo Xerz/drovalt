@@ -55,7 +55,16 @@ describe('game synchronization', () => {
       }),
     ]);
 
-    await executeGameSyncPlan(api, plan);
+    let added = 0;
+    const instrumentedApi = {
+      ...api,
+      async addProduct(serverId: string, productId: string) {
+        added += 1;
+        return api.addProduct(serverId, productId);
+      },
+    };
+    await executeGameSyncPlan(instrumentedApi, plan);
+    expect(added).toBe(3);
     const products = await api.getProducts('demo-station-02');
     expect(products.find((item) => item.productId === 'game-02')?.enabled).toBe(
       true,
@@ -85,5 +94,53 @@ describe('game synchronization', () => {
       GameSyncExecutionError,
     );
     expect(attempts).toBe(1);
+  });
+
+  it('adds a missing relation before copying custom settings', async () => {
+    const base = createDemoApi();
+    const source = await base.getProduct('demo-station-01', 'game-01');
+    const calls: string[] = [];
+    const api = {
+      ...base,
+      async addProduct(serverId: string, productId: string) {
+        calls.push('add');
+        return base.addProduct(serverId, productId);
+      },
+      async updateProduct(serverId: string, update: Parameters<typeof base.updateProduct>[1]) {
+        calls.push('update');
+        return base.updateProduct(serverId, update);
+      },
+    };
+    await executeGameSyncPlan(api, {
+      sourceStationId: 'demo-station-01',
+      sourceProductCount: 1,
+      readCount: 1,
+      targets: [{
+        stationId: 'demo-empty-station',
+        stationName: 'Пустая станция',
+        sourceProductCount: 1,
+        targetProductCount: 0,
+        upserts: [{
+          kind: 'add',
+          title: source.title,
+          update: {
+            productId: source.productId,
+            verified: source.verified,
+            enabled: false,
+            gamePath: source.gamePath,
+            workPath: source.workPath,
+            allowedPaths: source.allowedPaths,
+            args: source.args,
+          },
+          settingsChanges: [{ key: 'gamePath', before: null, after: source.gamePath }],
+        }],
+        toggles: [],
+        disable: [],
+      }],
+    });
+    expect(calls).toEqual(['add', 'update']);
+    const copied = await base.getProduct('demo-empty-station', source.productId);
+    expect(copied.gamePath).toBe(source.gamePath);
+    expect(copied.enabled).toBe(false);
   });
 });

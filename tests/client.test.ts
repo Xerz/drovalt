@@ -71,4 +71,16 @@ describe('Drova client', () => {
       args: null,
     });
   });
+
+  it('adds a missing product with POST and no request body', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await createLiveApi('private-token-value').addProduct('station-demo', 'product-demo');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://services.drova.io/server-manager/serverproduct/add/station-demo/product-demo');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
+  });
 });

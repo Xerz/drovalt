@@ -113,6 +113,7 @@ export interface DrovaApi {
   updateStation(serverId: string, name: string, description: string): Promise<void>;
   getProducts(serverId: string): Promise<GameSummary[]>;
   getProduct(serverId: string, productId: string): Promise<GameDetail>;
+  addProduct(serverId: string, productId: string): Promise<void>;
   updateProduct(serverId: string, update: ProductUpdate): Promise<void>;
   setProductEnabled(serverId: string, productId: string, target: boolean): Promise<void>;
   getUsage(): Promise<Usage>;

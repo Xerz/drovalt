@@ -113,6 +113,12 @@ export function createLiveApi(token: string): DrovaApi {
         ),
       );
     },
+    async addProduct(serverId, productId) {
+      await request(
+        `/server-manager/serverproduct/add/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}`,
+        { method: 'POST' },
+      );
+    },
     async updateProduct(serverId, update) {
       await request('/server-manager/serverproduct/update', {
         method: 'POST',

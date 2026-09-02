@@ -183,17 +183,32 @@ export function createDemoApi(): DrovaApi {
       if (!product) throw new Error('Игра не найдена на станции.');
       return pause(product);
     },
+    addProduct: async (serverId, productId) => {
+      await wait();
+      const list = products[serverId] ?? (products[serverId] = []);
+      if (list.some((item) => item.productId === productId)) return;
+      const base = Object.values(products)
+        .flat()
+        .find((item) => item.productId === productId);
+      if (!base) throw new Error('Игра отсутствует в демо-каталоге.');
+      list.push({
+        ...structuredClone(base),
+        gamePath: null,
+        workPath: null,
+        allowedPaths: null,
+        args: null,
+        enabled: true,
+      });
+      stations = stations.map((station) => station.uuid === serverId
+        ? { ...station, product_list: list.map((item) => item.productId) }
+        : station);
+    },
     updateProduct: async (serverId, update: ProductUpdate) => {
       await wait();
       const list = products[serverId] ?? (products[serverId] = []);
       const existing = list.find((item) => item.productId === update.productId);
-      if (existing) Object.assign(existing, update);
-      else {
-        const source = Object.values(catalog).find(([title]) => title === update.productId);
-        const base = Object.values(products).flat().find((item) => item.productId === update.productId);
-        list.push({ ...(base ?? detail('game-01')), ...update, productId: update.productId, title: base?.title ?? source?.[0] ?? 'Новая игра' });
-      }
-      stations = stations.map((station) => station.uuid === serverId ? { ...station, product_list: list.map((item) => item.productId) } : station);
+      if (!existing) throw new Error('Сначала добавьте игру на станцию.');
+      Object.assign(existing, update);
     },
     setProductEnabled: async (serverId, productId, target) => {
       await wait();
