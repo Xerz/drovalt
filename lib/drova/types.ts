@@ -109,7 +109,7 @@ export const merchantSessionSchema = z
     creator_ip: z.string().nullable().optional(),
     billing_type: z.string().nullable().optional(),
     score: z.union([z.number(), z.string()]).nullable().optional(),
-    score_reason: z.string().nullable().optional(),
+    score_reason: z.union([z.string(), z.number()]).nullable().optional(),
     score_text: z.string().nullable().optional(),
     abort_comment: z.string().nullable().optional(),
   })

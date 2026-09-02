@@ -50,10 +50,12 @@ describe('session data', () => {
         merchant_id: 'merchant-42',
         product_id: 'game-a',
         created_on: 100,
+        score_reason: 7,
       },
     ]);
     expect(value).toHaveLength(1);
     expect(value[0].status).toBe('');
+    expect(value[0].score_reason).toBe(7);
   });
 
   it('deduplicates by uuid and uses the stable tuple as fallback', () => {

@@ -215,7 +215,8 @@ export function SessionsPage() {
                     (item) => item.productId === productId,
                   )?.useDefaultDesktop,
                 ),
-          scoreReason: session.score_reason ?? '',
+          scoreReason:
+            session.score_reason == null ? '' : String(session.score_reason),
           abortComment: session.abort_comment ?? '',
         } satisfies SessionRow;
       }),
