@@ -24,9 +24,22 @@ const navigation = [
   { route: 'sessions' as const, label: 'Сессии', icon: Clock3 },
 ];
 
+declare global {
+  interface Window {
+    __DROVALT_HASH_ROUTING__?: boolean;
+  }
+}
+
 function routeFromPathname(pathname: string): AppRoute {
   const value = pathname.split('/').filter(Boolean)[0];
   return navigation.some((item) => item.route === value) ? value as AppRoute : 'stations';
+}
+
+function currentBrowserRoute() {
+  if (window.__DROVALT_HASH_ROUTING__) {
+    return routeFromPathname(window.location.hash.replace(/^#/, ''));
+  }
+  return routeFromPathname(window.location.pathname);
 }
 
 export function MerchantApp({ initialRoute = 'stations' }: { initialRoute?: AppRoute }) {
@@ -35,14 +48,26 @@ export function MerchantApp({ initialRoute = 'stations' }: { initialRoute?: AppR
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setRoute(routeFromPathname(window.location.pathname));
-    const onPopState = () => setRoute(routeFromPathname(window.location.pathname));
+    setRoute(currentBrowserRoute());
+    const onPopState = () => setRoute(currentBrowserRoute());
     window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    window.addEventListener('hashchange', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('hashchange', onPopState);
+    };
   }, []);
 
   const navigate = (next: AppRoute) => {
-    window.history.pushState({}, '', next === 'stations' ? '/stations' : `/${next}`);
+    if (window.__DROVALT_HASH_ROUTING__) {
+      window.location.hash = `/${next}`;
+    } else {
+      window.history.pushState(
+        {},
+        '',
+        next === 'stations' ? '/stations' : `/${next}`,
+      );
+    }
     setRoute(next);
     setMobileOpen(false);
   };
