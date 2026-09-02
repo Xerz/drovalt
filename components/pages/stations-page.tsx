@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  formatDuration,
   formatHeartbeat,
   getStationDisplayStatus,
   isStationOnline,
@@ -175,6 +176,13 @@ export function StationsPage() {
     stationProductsQuery.isFetching ||
     latestSessionsQuery.isFetching ||
     catalogQuery.isFetching;
+  const lastUpdatedAt =
+    Math.max(
+      stationsQuery.dataUpdatedAt,
+      stationProductsQuery.dataUpdatedAt,
+      latestSessionsQuery.dataUpdatedAt,
+      catalogQuery.dataUpdatedAt,
+    ) || null;
 
   const refreshAll = async () => {
     await Promise.all([
@@ -203,14 +211,27 @@ export function StationsPage() {
             страницами.
           </p>
         </div>
-        <Button
-          variant="outline"
-          disabled={!account || isRefreshing}
-          onClick={() => void refreshAll()}
-        >
-          <RefreshCw className={isRefreshing ? 'animate-spin' : ''} />
-          Обновить данные
-        </Button>
+        <div className="flex flex-col items-start gap-1.5 sm:items-end">
+          <Button
+            variant="outline"
+            disabled={!account || isRefreshing}
+            onClick={() => void refreshAll()}
+          >
+            <RefreshCw className={isRefreshing ? 'animate-spin' : ''} />
+            Обновить данные
+          </Button>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {isRefreshing
+              ? 'Получаем свежие данные…'
+              : lastUpdatedAt
+                ? `Данные получены в ${new Intl.DateTimeFormat('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  }).format(lastUpdatedAt)}`
+                : 'Данные ещё не получены'}
+          </span>
+        </div>
       </div>
 
       {rowError && (
@@ -303,7 +324,14 @@ export function StationsPage() {
                             {latestGameTitle ?? 'Название недоступно'}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {formatHeartbeat(latestSession.created_on)}
+                            {formatHeartbeat(latestSession.created_on)} ·{' '}
+                            {formatDuration(
+                              Math.max(
+                                0,
+                                (latestSession.finished_on ?? Date.now()) -
+                                  latestSession.created_on,
+                              ),
+                            )}
                           </p>
                         </div>
                       ) : (
@@ -314,7 +342,18 @@ export function StationsPage() {
                     </TableCell>
                     <TableCell>
                       {Array.isArray(productList) ? (
-                        <Badge variant="secondary">{productList.length}</Badge>
+                        <a
+                          href={`/games?station=${encodeURIComponent(station.uuid)}`}
+                          className="inline-flex rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                          aria-label={`Открыть ${productList.length} игр станции ${station.name}`}
+                        >
+                          <Badge
+                            variant="secondary"
+                            className="cursor-pointer hover:bg-primary/15"
+                          >
+                            {productList.length}
+                          </Badge>
+                        </a>
                       ) : productList === null ? (
                         <Badge
                           variant="outline"

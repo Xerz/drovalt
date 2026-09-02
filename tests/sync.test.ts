@@ -43,7 +43,7 @@ describe('game synchronization', () => {
     expect(starts[2] - starts[1]).toBeGreaterThanOrEqual(100);
   });
 
-  it('previews additions, updates, toggles and disables before writing', async () => {
+  it('previews additions, updates, toggles and removals before writing', async () => {
     const api = createDemoApi();
     const plan = await buildGameSyncPlan(api, 'demo-station-01', [
       { id: 'demo-station-02', name: 'Орбита' },
@@ -52,7 +52,7 @@ describe('game synchronization', () => {
       add: 3,
       update: 1,
       toggle: 1,
-      disable: 1,
+      remove: 1,
     });
     expect(plan.sourceProductCount).toBe(6);
     expect(plan.targets[0]).toMatchObject({
@@ -81,11 +81,9 @@ describe('game synchronization', () => {
         enabled: true,
       }),
     ]);
-    expect(plan.targets[0].disable).toEqual([
+    expect(plan.targets[0].remove).toEqual([
       expect.objectContaining({
         title: 'War Thunder',
-        previousEnabled: true,
-        enabled: false,
       }),
     ]);
 
@@ -103,13 +101,29 @@ describe('game synchronization', () => {
     expect(products.find((item) => item.productId === 'game-02')?.enabled).toBe(
       true,
     );
-    expect(products.find((item) => item.productId === 'game-07')?.enabled).toBe(
-      false,
-    );
+    expect(products.find((item) => item.productId === 'game-07')).toBeUndefined();
     expect(products.find((item) => item.productId === 'game-06')).toBeDefined();
     const copied = await api.getProduct('demo-station-02', 'game-01');
     expect(copied.gamePath).toContain('DrovaGames');
   }, 15_000);
+
+  it('copies only selected games and leaves every other target game untouched', async () => {
+    const api = createDemoApi();
+    const plan = await buildGameSyncPlan(
+      api,
+      'demo-station-01',
+      [{ id: 'demo-station-02', name: 'Орбита' }],
+      undefined,
+      ['game-01', 'game-02'],
+    );
+    expect(plan.scope).toBe('selected');
+    expect(plan.sourceProductCount).toBe(2);
+    expect(plan.targets[0].remove).toEqual([]);
+
+    await executeGameSyncPlan(api, plan);
+    const products = await api.getProducts('demo-station-02');
+    expect(products.find((item) => item.productId === 'game-07')).toBeDefined();
+  });
 
   it('stops after the first failed write without retrying', async () => {
     const base = createDemoApi();
@@ -148,6 +162,7 @@ describe('game synchronization', () => {
     await executeGameSyncPlan(api, {
       sourceStationId: 'demo-station-01',
       sourceProductCount: 1,
+      scope: 'selected',
       readCount: 1,
       targets: [{
         stationId: 'demo-empty-station',
@@ -169,7 +184,7 @@ describe('game synchronization', () => {
           settingsChanges: [{ key: 'gamePath', before: null, after: source.gamePath }],
         }],
         toggles: [],
-        disable: [],
+        remove: [],
       }],
     });
     expect(calls).toEqual(['add', 'update']);

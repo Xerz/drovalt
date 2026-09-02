@@ -226,6 +226,16 @@ export function createDemoApi(): DrovaApi {
         ? { ...station, product_list: list.map((item) => item.productId) }
         : station);
     },
+    deleteProduct: async (serverId, productId) => {
+      await wait();
+      const list = products[serverId] ?? [];
+      const index = list.findIndex((item) => item.productId === productId);
+      if (index < 0) throw new Error('Игра не найдена на станции.');
+      list.splice(index, 1);
+      stations = stations.map((station) => station.uuid === serverId
+        ? { ...station, product_list: list.map((item) => item.productId) }
+        : station);
+    },
     updateProduct: async (serverId, update: ProductUpdate) => {
       await wait();
       const list = products[serverId] ?? (products[serverId] = []);

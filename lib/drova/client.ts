@@ -136,6 +136,12 @@ export function createLiveApi(token: string): DrovaApi {
         { method: 'POST' },
       );
     },
+    async deleteProduct(serverId, productId) {
+      await request(
+        `/server-manager/serverproduct/delete/${encodeURIComponent(serverId)}/${encodeURIComponent(productId)}`,
+        { method: 'DELETE' },
+      );
+    },
     async updateProduct(serverId, update) {
       await request('/server-manager/serverproduct/update', {
         method: 'POST',

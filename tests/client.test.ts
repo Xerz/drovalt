@@ -113,6 +113,25 @@ describe('Drova client', () => {
     expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
   });
 
+  it('deletes a product with DELETE and no request body', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await createLiveApi('private-token-value').deleteProduct(
+      'station-demo',
+      'product-demo',
+    );
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      'https://services.drova.io/server-manager/serverproduct/delete/station-demo/product-demo',
+    );
+    expect(init?.method).toBe('DELETE');
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
+  });
+
   it('loads the public catalog and the latest station session', async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
       if (requestUrl(url).includes('/product-manager/product/listfull2')) {

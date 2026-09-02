@@ -26,8 +26,9 @@ import {
   Server,
   Settings2,
   SlidersHorizontal,
+  Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -124,6 +125,14 @@ export function GamesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [deleteCandidates, setDeleteCandidates] = useState<GameSummary[]>([]);
+  const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
+  const stationRouteApplied = useRef(false);
+  const bulkApi = useMemo(
+    () => (mode === 'live' ? createGameRequestLimitedApi(api) : api),
+    [api, mode],
+  );
 
   const stationsQuery = useQuery({
     queryKey: ['stations', mode, account?.uuid],
@@ -136,12 +145,22 @@ export function GamesPage() {
   );
 
   useEffect(() => {
-    if (
-      stations.length &&
-      !stations.some((station) => station.uuid === selectedStationId)
-    )
+    if (!stations.length) return;
+    if (!stationRouteApplied.current) {
+      stationRouteApplied.current = true;
+      const requestedStation = new URLSearchParams(window.location.search).get(
+        'station',
+      );
+      if (stations.some((station) => station.uuid === requestedStation)) {
+        setSelectedStationId(requestedStation!);
+        return;
+      }
+    }
+    if (!stations.some((station) => station.uuid === selectedStationId))
       setSelectedStationId(stations[0].uuid);
   }, [stations, selectedStationId]);
+
+  useEffect(() => setSelectedProductIds([]), [selectedStationId]);
 
   const productsQuery = useQuery({
     queryKey: ['products', mode, selectedStationId],
@@ -149,7 +168,18 @@ export function GamesPage() {
     enabled: Boolean(selectedStationId && account),
   });
 
+  useEffect(() => {
+    if (!productsQuery.data) return;
+    const currentIds = new Set(
+      productsQuery.data.map((product) => product.productId),
+    );
+    setSelectedProductIds((current) =>
+      current.filter((id) => currentIds.has(id)),
+    );
+  }, [productsQuery.data]);
+
   const enabledMutation = useMutation({
+    retry: 0,
     mutationFn: async ({
       product,
       target,
@@ -198,9 +228,117 @@ export function GamesPage() {
       }),
     [productsQuery.data, search, filter],
   );
+  const selectedProducts = useMemo(() => {
+    const selected = new Set(selectedProductIds);
+    return (productsQuery.data ?? []).filter((product) =>
+      selected.has(product.productId),
+    );
+  }, [productsQuery.data, selectedProductIds]);
+  const allVisibleSelected =
+    visibleProducts.length > 0 &&
+    visibleProducts.every((product) =>
+      selectedProductIds.includes(product.productId),
+    );
+  const someVisibleSelected = visibleProducts.some((product) =>
+    selectedProductIds.includes(product.productId),
+  );
+
+  const bulkMutation = useMutation({
+    retry: 0,
+    mutationFn: async ({
+      action,
+      products,
+    }: {
+      action: 'enable' | 'disable' | 'delete';
+      products: GameSummary[];
+    }) => {
+      setBulkProgress({ completed: 0, total: products.length });
+      let finalProducts = productsQuery.data ?? [];
+      for (const [index, product] of products.entries()) {
+        if (action === 'delete') {
+          await bulkApi.deleteProduct(selectedStationId, product.productId);
+          finalProducts = await bulkApi.getProducts(selectedStationId);
+          if (finalProducts.some((item) => item.productId === product.productId))
+            throw new Error(`Drova не подтвердил удаление «${product.title}».`);
+        } else {
+          const target = action === 'enable';
+          await bulkApi.setProductEnabled(
+            selectedStationId,
+            product.productId,
+            target,
+          );
+          const readback = await bulkApi.getProduct(
+            selectedStationId,
+            product.productId,
+          );
+          if (readback.enabled !== target)
+            throw new Error(`Drova не подтвердил состояние «${product.title}».`);
+        }
+        setBulkProgress({ completed: index + 1, total: products.length });
+      }
+      if (action !== 'delete')
+        finalProducts = await bulkApi.getProducts(selectedStationId);
+      return finalProducts;
+    },
+    onMutate: () => setActionError(''),
+    onSuccess: async (products) => {
+      queryClient.setQueryData(
+        ['products', mode, selectedStationId],
+        products,
+      );
+      setSelectedProductIds([]);
+      setDeleteCandidates([]);
+      await queryClient.invalidateQueries({ queryKey: ['stations', mode] });
+      await queryClient.invalidateQueries({
+        queryKey: ['station-game-counts', mode],
+      });
+    },
+    onError: (error) => {
+      setActionError(
+        error instanceof Error ? error.message : 'Массовая операция остановлена.',
+      );
+      void productsQuery.refetch();
+    },
+  });
 
   const columns = useMemo<ColumnDef<GameSummary>[]>(
     () => [
+      {
+        id: 'select',
+        header: () => (
+          <Checkbox
+            checked={allVisibleSelected}
+            indeterminate={!allVisibleSelected && someVisibleSelected}
+            disabled={!visibleProducts.length || bulkMutation.isPending}
+            aria-label="Выбрать все показанные игры"
+            onCheckedChange={(checked) => {
+              const visibleIds = new Set(
+                visibleProducts.map((product) => product.productId),
+              );
+              setSelectedProductIds((current) =>
+                checked
+                  ? [...new Set([...current, ...visibleIds])]
+                  : current.filter((id) => !visibleIds.has(id)),
+              );
+            }}
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={selectedProductIds.includes(row.original.productId)}
+            disabled={bulkMutation.isPending}
+            aria-label={`Выбрать ${row.original.title}`}
+            onCheckedChange={(checked) =>
+              setSelectedProductIds((current) =>
+                checked
+                  ? [...new Set([...current, row.original.productId])]
+                  : current.filter((id) => id !== row.original.productId),
+              )
+            }
+          />
+        ),
+        enableSorting: false,
+      },
       {
         accessorKey: 'title',
         header: ({ column }) => (
@@ -255,6 +393,7 @@ export function GamesPage() {
           <Switch
             checked={row.original.enabled}
             disabled={
+              bulkMutation.isPending ||
               enabledMutation.isPending &&
               enabledMutation.variables?.product.productId ===
                 row.original.productId
@@ -270,18 +409,38 @@ export function GamesPage() {
         id: 'actions',
         header: '',
         cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setEditingProductId(row.original.productId)}
-          >
-            <Pencil />
-            Изменить
-          </Button>
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bulkMutation.isPending}
+              onClick={() => setEditingProductId(row.original.productId)}
+            >
+              <Pencil />
+              Изменить
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              disabled={bulkMutation.isPending}
+              aria-label={`Удалить ${row.original.title}`}
+              onClick={() => setDeleteCandidates([row.original])}
+            >
+              <Trash2 />
+            </Button>
+          </div>
         ),
       },
     ],
-    [enabledMutation],
+    [
+      allVisibleSelected,
+      bulkMutation.isPending,
+      enabledMutation,
+      selectedProductIds,
+      someVisibleSelected,
+      visibleProducts,
+    ],
   );
 
   const table = useReactTable({
@@ -314,7 +473,11 @@ export function GamesPage() {
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={!selectedStationId || productsQuery.isFetching}
+            disabled={
+              !selectedStationId ||
+              productsQuery.isFetching ||
+              bulkMutation.isPending
+            }
             onClick={() => void productsQuery.refetch()}
           >
             <RefreshCw
@@ -323,7 +486,11 @@ export function GamesPage() {
             Обновить
           </Button>
           <Button
-            disabled={!selectedStationId || productsQuery.isPending}
+            disabled={
+              !selectedStationId ||
+              productsQuery.isPending ||
+              bulkMutation.isPending
+            }
             onClick={() => setAddOpen(true)}
           >
             <Plus />
@@ -331,11 +498,17 @@ export function GamesPage() {
           </Button>
           <Button
             variant="outline"
-            disabled={stations.length < 2 || !selectedStationId}
+            disabled={
+              stations.length < 2 ||
+              !selectedStationId ||
+              bulkMutation.isPending
+            }
             onClick={() => setCopyOpen(true)}
           >
             <Copy />
-            Скопировать список
+            {selectedProducts.length
+              ? 'Скопировать список на другие станции'
+              : 'Синхронизировать на другие станции'}
           </Button>
         </div>
       </div>
@@ -362,6 +535,7 @@ export function GamesPage() {
                 id="station-select"
                 className="w-full"
                 value={selectedStationId}
+                disabled={bulkMutation.isPending}
                 onChange={(event) => setSelectedStationId(event.target.value)}
               >
                 {stations.map((station) => (
@@ -376,6 +550,7 @@ export function GamesPage() {
               <Input
                 className="pl-8"
                 value={search}
+                disabled={bulkMutation.isPending}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Найти игру"
                 aria-label="Поиск игр"
@@ -385,6 +560,7 @@ export function GamesPage() {
               <SlidersHorizontal className="size-4 text-muted-foreground" />
               <NativeSelect
                 value={filter}
+                disabled={bulkMutation.isPending}
                 onChange={(event) =>
                   setFilter(event.target.value as GameFilter)
                 }
@@ -400,6 +576,63 @@ export function GamesPage() {
               </NativeSelect>
             </div>
           </div>
+
+          {selectedProducts.length > 0 && (
+            <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">
+                  Выбрано: {selectedProducts.length}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Операции выполняются последовательно и проверяются чтением.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkMutation.isPending}
+                  onClick={() =>
+                    bulkMutation.mutate({
+                      action: 'disable',
+                      products: selectedProducts,
+                    })
+                  }
+                >
+                  <PowerOff />
+                  Отключить
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkMutation.isPending}
+                  onClick={() =>
+                    bulkMutation.mutate({
+                      action: 'enable',
+                      products: selectedProducts,
+                    })
+                  }
+                >
+                  <Power />
+                  Включить
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={bulkMutation.isPending}
+                  onClick={() => setDeleteCandidates(selectedProducts)}
+                >
+                  <Trash2 />
+                  Удалить
+                </Button>
+              </div>
+              {bulkMutation.isPending && (
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {bulkProgress.completed} из {bulkProgress.total}
+                </p>
+              )}
+            </div>
+          )}
 
           {actionError && (
             <Alert variant="destructive" className="mt-4">
@@ -451,7 +684,15 @@ export function GamesPage() {
                 <TableBody>
                   {table.getRowModel().rows.length ? (
                     table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id} className="h-[68px]">
+                      <TableRow
+                        key={row.id}
+                        className="h-[68px]"
+                        data-state={
+                          selectedProductIds.includes(row.original.productId)
+                            ? 'selected'
+                            : undefined
+                        }
+                      >
                         {row.getVisibleCells().map((cell, index) => (
                           <TableCell
                             key={cell.id}
@@ -505,6 +746,19 @@ export function GamesPage() {
         onOpenChange={setCopyOpen}
         source={selectedStation}
         stations={stations}
+        selectedProductIds={selectedProductIds}
+      />
+      <DeleteGamesDialog
+        products={deleteCandidates}
+        stationName={selectedStation?.name}
+        pending={bulkMutation.isPending}
+        onOpenChange={(open) => !open && setDeleteCandidates([])}
+        onConfirm={() =>
+          bulkMutation.mutate({
+            action: 'delete',
+            products: deleteCandidates,
+          })
+        }
       />
     </div>
   );
@@ -693,6 +947,64 @@ function AddGameDialog({
 
 function productTitle(product: CatalogProduct) {
   return product.displayName?.trim() || product.title;
+}
+
+function DeleteGamesDialog({
+  products,
+  stationName,
+  pending,
+  onOpenChange,
+  onConfirm,
+}: {
+  products: GameSummary[];
+  stationName?: string;
+  pending: boolean;
+  onOpenChange(open: boolean): void;
+  onConfirm(): void;
+}) {
+  return (
+    <Dialog
+      open={products.length > 0}
+      onOpenChange={(open) => !pending && onOpenChange(open)}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            Удалить {products.length === 1 ? 'игру' : `${products.length} игр`}?
+          </DialogTitle>
+          <DialogDescription>
+            Связь со станцией «{stationName ?? 'Выбранная станция'}» будет
+            удалена. Автоматического восстановления нет.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border bg-muted/25 p-3">
+          {products.slice(0, 10).map((product) => (
+            <p key={product.productId} className="truncate text-sm">
+              {product.title}
+            </p>
+          ))}
+          {products.length > 10 && (
+            <p className="text-xs text-muted-foreground">
+              И ещё {products.length - 10}
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => onOpenChange(false)}
+          >
+            Отмена
+          </Button>
+          <Button variant="destructive" disabled={pending} onClick={onConfirm}>
+            <Trash2 />
+            {pending ? 'Удаляем…' : 'Удалить без восстановления'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function GameEditDialog({
@@ -886,11 +1198,13 @@ function GameCopyDialog({
   onOpenChange,
   source,
   stations,
+  selectedProductIds,
 }: {
   open: boolean;
   onOpenChange(open: boolean): void;
   source?: Station;
   stations: Station[];
+  selectedProductIds: string[];
 }) {
   const { api, mode } = useMerchant();
   const queryClient = useQueryClient();
@@ -903,6 +1217,7 @@ function GameCopyDialog({
     () => (mode === 'live' ? createGameRequestLimitedApi(api) : api),
     [api, mode],
   );
+  const partialCopy = selectedProductIds.length > 0;
 
   useEffect(() => {
     if (!open) {
@@ -928,6 +1243,7 @@ function GameCopyDialog({
           .filter((station) => targetIds.includes(station.uuid))
           .map((station) => ({ id: station.uuid, name: station.name })),
         setProgress,
+        partialCopy ? selectedProductIds : undefined,
       );
       setPlan(nextPlan);
       setProgress(null);
@@ -969,10 +1285,16 @@ function GameCopyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Скопировать список игр</DialogTitle>
+          <DialogTitle>
+            {partialCopy
+              ? 'Скопировать выбранные игры'
+              : 'Синхронизировать список игр'}
+          </DialogTitle>
           <DialogDescription>
-            Источник: {source?.name}. Лишние игры на целевых станциях будут
-            отключены, но не удалены.{' '}
+            Источник: {source?.name}.{' '}
+            {partialCopy
+              ? `${selectedProductIds.length} выбранных игр будут добавлены или обновлены; остальные игры на целевых станциях не изменятся. `
+              : 'Игры, которых нет на исходной станции, будут безвозвратно удалены с целевых станций. '}
             {mode === 'live'
               ? `Игровые запросы идут строго по одному с паузой не менее ${GAME_SYNC_MIN_INTERVAL_MS} мс.`
               : 'Игровые запросы идут строго по одному.'}
@@ -1036,7 +1358,7 @@ function GameCopyDialog({
               <CountCard value={counts.add} label="Добавить" />
               <CountCard value={counts.update} label="Настройки" />
               <CountCard value={counts.toggle} label="Сменить статус" />
-              <CountCard value={counts.disable} label="Отключить лишние" />
+              <CountCard value={counts.remove} label="Удалить лишние" />
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
               Количество берётся из полного списка игр, а не из сокращённого{' '}
@@ -1082,8 +1404,14 @@ function GameCopyDialog({
             </Button>
           )}
           {plan && !result && (
-            <Button disabled={Boolean(progress)} onClick={() => void execute()}>
-              Подтвердить и применить
+            <Button
+              variant={plan.scope === 'full' && counts?.remove ? 'destructive' : 'default'}
+              disabled={Boolean(progress)}
+              onClick={() => void execute()}
+            >
+              {plan.scope === 'full' && counts?.remove
+                ? 'Удалить лишние и применить'
+                : 'Подтвердить и применить'}
             </Button>
           )}
         </DialogFooter>
@@ -1135,7 +1463,7 @@ function TargetDiff({ target }: { target: GameSyncTargetPlan }) {
     additions.length +
     updates.length +
     target.toggles.length +
-    target.disable.length;
+    target.remove.length;
 
   return (
     <div className="overflow-hidden rounded-2xl border bg-card">
@@ -1216,16 +1544,16 @@ function TargetDiff({ target }: { target: GameSyncTargetPlan }) {
           ))}
         </DiffGroup>
         <DiffGroup
-          icon={<PowerOff />}
-          title="Будут отключены как лишние"
-          count={target.disable.length}
-          empty="Лишних включённых игр нет"
+          icon={<Trash2 />}
+          title="Будут удалены как лишние"
+          count={target.remove.length}
+          empty="Лишних игр нет"
         >
-          {target.disable.map((item) => (
+          {target.remove.map((item) => (
             <DiffGameRow
               key={item.productId}
               title={item.title}
-              note="Игра останется на станции, enabled станет false"
+              note="Связь игры со станцией будет удалена без восстановления"
             />
           ))}
         </DiffGroup>

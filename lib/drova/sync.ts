@@ -17,6 +17,11 @@ export type SyncToggle = {
   previousEnabled: boolean;
 };
 
+export type SyncRemoval = {
+  productId: string;
+  title: string;
+};
+
 export type SyncOverrideKey = 'gamePath' | 'workPath' | 'allowedPaths' | 'args';
 
 export type SyncSettingChange = {
@@ -37,12 +42,13 @@ export type GameSyncTargetPlan = {
   targetProductCount: number;
   upserts: SyncUpsert[];
   toggles: SyncToggle[];
-  disable: SyncToggle[];
+  remove: SyncRemoval[];
 };
 
 export type GameSyncPlan = {
   sourceStationId: string;
   sourceProductCount: number;
+  scope: 'full' | 'selected';
   targets: GameSyncTargetPlan[];
   readCount: number;
 };
@@ -112,6 +118,8 @@ export function createGameRequestLimitedApi(
       schedule(() => api.getProduct(serverId, productId)),
     addProduct: (serverId, productId) =>
       schedule(() => api.addProduct(serverId, productId)),
+    deleteProduct: (serverId, productId) =>
+      schedule(() => api.deleteProduct(serverId, productId)),
     updateProduct: (serverId, update) =>
       schedule(() => api.updateProduct(serverId, update)),
     setProductEnabled: (serverId, productId, target) =>
@@ -124,8 +132,19 @@ export async function buildGameSyncPlan(
   sourceStationId: string,
   targetStations: Array<{ id: string; name: string }>,
   onProgress?: (progress: SyncProgress) => void,
+  selectedProductIds?: string[],
 ): Promise<GameSyncPlan> {
-  const sourceProducts = await api.getProducts(sourceStationId);
+  const allSourceProducts = await api.getProducts(sourceStationId);
+  const selectedIds = selectedProductIds?.length
+    ? new Set(selectedProductIds)
+    : null;
+  const sourceProducts = selectedIds
+    ? allSourceProducts.filter((item) => selectedIds.has(item.productId))
+    : allSourceProducts;
+  if (selectedIds && sourceProducts.length !== selectedIds.size)
+    throw new Error(
+      'Часть выбранных игр больше не найдена на исходной станции. Обновите список.',
+    );
   const targetProducts = await mapLimited(
     targetStations,
     1,
@@ -171,13 +190,20 @@ export async function buildGameSyncPlan(
           return value;
         },
       );
-      return compareTarget(station, sourceDetails, products, targetDetails);
+      return compareTarget(
+        station,
+        sourceDetails,
+        products,
+        targetDetails,
+        selectedIds === null,
+      );
     },
   );
 
   return {
     sourceStationId,
     sourceProductCount: sourceProducts.length,
+    scope: selectedIds ? 'selected' : 'full',
     targets,
     readCount: detailReads + targetStations.length + 1,
   };
@@ -188,6 +214,7 @@ function compareTarget(
   sourceDetails: GameDetail[],
   targetProducts: GameSummary[],
   targetDetails: GameDetail[],
+  removeExtraneous: boolean,
 ): GameSyncTargetPlan {
   const targetDetailsById = new Map(
     targetDetails.map((item) => [item.productId, item]),
@@ -234,13 +261,11 @@ function compareTarget(
     }
   }
 
-  const disable = targetProducts
-    .filter((item) => !sourceIds.has(item.productId) && item.enabled)
+  const remove = targetProducts
+    .filter((item) => removeExtraneous && !sourceIds.has(item.productId))
     .map((item) => ({
       productId: item.productId,
       title: item.title,
-      enabled: false,
-      previousEnabled: item.enabled,
     }));
 
   return {
@@ -250,7 +275,7 @@ function compareTarget(
     targetProductCount: targetProducts.length,
     upserts,
     toggles,
-    disable,
+    remove,
   };
 }
 
@@ -278,9 +303,9 @@ export function syncPlanCounts(plan: GameSyncPlan) {
         total.toggle +
         target.toggles.length +
         target.upserts.filter((item) => item.statusChange).length,
-      disable: total.disable + target.disable.length,
+      remove: total.remove + target.remove.length,
     }),
-    { add: 0, update: 0, toggle: 0, disable: 0 },
+    { add: 0, update: 0, toggle: 0, remove: 0 },
   );
 }
 
@@ -294,7 +319,7 @@ export async function executeGameSyncPlan(
       sum +
       target.upserts.length +
       target.toggles.length +
-      target.disable.length +
+      target.remove.length +
       1,
     0,
   );
@@ -329,17 +354,13 @@ export async function executeGameSyncPlan(
         );
         completed += 1;
       }
-      for (const operation of target.disable) {
+      for (const operation of target.remove) {
         onProgress?.({
           completed,
           total,
           label: `${target.stationName} · ${operation.title}`,
         });
-        await api.setProductEnabled(
-          target.stationId,
-          operation.productId,
-          false,
-        );
+        await api.deleteProduct(target.stationId, operation.productId);
         completed += 1;
       }
       onProgress?.({
@@ -392,9 +413,13 @@ async function verifyTarget(api: DrovaApi, target: GameSyncTargetPlan) {
     if (overrideKeys.some((key) => detail[key] !== operation.update[key]))
       throw new Error('Readback настроек не совпал.');
   }
-  for (const operation of [...target.toggles, ...target.disable]) {
+  for (const operation of target.toggles) {
     if (byId.get(operation.productId)?.enabled !== operation.enabled)
       throw new Error('Readback состояния не совпал.');
+  }
+  for (const operation of target.remove) {
+    if (byId.has(operation.productId))
+      throw new Error('Readback удаления не совпал.');
   }
 }
 
