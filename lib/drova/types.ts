@@ -115,6 +115,11 @@ export const merchantSessionListSchema = z.object({
   sessions: z.array(merchantSessionSchema).default([]),
 });
 
+export const merchantSessionResponseSchema = z.union([
+  merchantSessionListSchema.transform((value) => value.sessions),
+  z.array(merchantSessionSchema),
+]);
+
 export type Account = z.infer<typeof accountSchema>;
 export type Station = z.infer<typeof stationSchema>;
 export type GameSummary = z.infer<typeof gameSummarySchema>;
@@ -140,8 +145,7 @@ export type ProductUpdate = ProductOverrides & {
   enabled: boolean;
 };
 
-export type SessionQuery = {
-  serverId?: string;
+export type MerchantSessionQuery = {
   limit?: number;
 };
 
@@ -150,7 +154,10 @@ export interface DrovaApi {
   getCatalog(): Promise<CatalogProduct[]>;
   getStations(merchantId: string): Promise<Station[]>;
   getStation(serverId: string, merchantId: string): Promise<Station>;
-  getSessions(query?: SessionQuery): Promise<MerchantSession[]>;
+  getMerchantSessions(
+    merchantId: string,
+    query?: MerchantSessionQuery,
+  ): Promise<MerchantSession[]>;
   getServerNames(serverIds: string[]): Promise<Record<string, string>>;
   getLatestSession(serverId: string): Promise<MerchantSession | null>;
   setStationFlag(

@@ -26,9 +26,9 @@ test('sessions table supports filters, detailed fields and manual history load',
   await page.getByRole('button', { name: 'Все поля' }).click();
   await expect(page.getByText('UUID', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '7 дней' }).click();
-  await page.getByRole('button', { name: 'Загрузить ещё' }).click();
+  await page.getByRole('button', { name: 'Загрузить до 1000' }).click();
   await expect(
-    page.getByText(/Загрузка (истории по станциям|завершена)/),
+    page.getByRole('button', { name: 'История загружена' }),
   ).toBeVisible();
   await expect(page.getByLabel('Включить тёмную тему')).toBeVisible();
   await page.getByLabel('Включить тёмную тему').click();

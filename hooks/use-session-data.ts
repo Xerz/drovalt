@@ -13,7 +13,7 @@ export function useSessionData() {
   const { api, account, mode } = useMerchant();
   return useQuery({
     queryKey: sessionDatasetQueryKey(mode, account?.uuid),
-    queryFn: () => fetchSessionDataset(api),
+    queryFn: () => fetchSessionDataset(api, account!.uuid),
     enabled: Boolean(account),
     staleTime: 5 * 60_000,
   });

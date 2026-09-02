@@ -313,13 +313,8 @@ export function createDemoApi(): DrovaApi {
       if (!station) throw new Error('Станция не найдена.');
       return pause(station);
     },
-    getSessions: ({ serverId, limit = 1000 } = {}) =>
-      pause(
-        (serverId
-          ? demoSessions.filter((session) => session.server_id === serverId)
-          : demoSessions.slice(0, 72)
-        ).slice(0, limit),
-      ),
+    getMerchantSessions: (_merchantId, { limit = 600 } = {}) =>
+      pause(demoSessions.slice(0, limit)),
     getServerNames: (serverIds) =>
       pause(
         Object.fromEntries(

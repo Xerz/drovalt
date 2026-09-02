@@ -4,7 +4,10 @@ import { GeoIpLookup, loadGeoIp } from '@/lib/drova/geoip';
 import { buildSessionCsv } from '@/lib/drova/session-csv';
 import {
   dedupeSessions,
-  loadSessionHistory,
+  fetchSessionDataset,
+  loadMerchantSessionHistory,
+  MERCHANT_SESSION_EXPANDED_LIMIT,
+  MERCHANT_SESSION_INITIAL_LIMIT,
   mergeSessionDataset,
   sessionKey,
   type SessionDataset,
@@ -16,7 +19,7 @@ import {
 } from '@/lib/drova/types';
 
 describe('session data', () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => vi.restoreAllMocks());
 
   it('parses finished, active and aborted response rows', () => {
     const value = merchantSessionListSchema.parse({
@@ -45,30 +48,31 @@ describe('session data', () => {
     expect(sessionKey(fallback)).toContain('client-1');
   });
 
-  it('loads station history sequentially with the configured interval and no retry', async () => {
-    vi.useFakeTimers();
-    const starts: Array<{ id: string; at: number }> = [];
+  it('loads only merchant-owned sessions through the accounting endpoint contract', async () => {
+    const calls: Array<{ merchantId: string; limit?: number }> = [];
     const api = {
-      async getSessions({ serverId }: { serverId?: string } = {}) {
-        starts.push({ id: serverId ?? '', at: Date.now() });
-        if (serverId === 'b') throw new Error('rate limited');
-        return [session(serverId ?? '', starts.length, starts.length + 1)];
+      async getMerchantSessions(
+        merchantId: string,
+        { limit }: { limit?: number } = {},
+      ) {
+        calls.push({ merchantId, limit });
+        return [session('merchant-row', 1, 2)];
       },
-    } as DrovaApi;
-    const pending = loadSessionHistory(api, ['a', 'b', 'c'], {
-      minIntervalMs: 100,
-    });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(starts.map((item) => item.id)).toEqual(['a']);
-    await vi.advanceTimersByTimeAsync(100);
-    expect(starts.map((item) => item.id)).toEqual(['a', 'b']);
-    await vi.advanceTimersByTimeAsync(100);
-    const result = await pending;
-    expect(starts.map((item) => item.id)).toEqual(['a', 'b', 'c']);
-    expect(starts[1].at - starts[0].at).toBeGreaterThanOrEqual(100);
-    expect(result.failedServerIds).toEqual(['b']);
-    expect(result.successfulServerIds).toEqual(['a', 'c']);
-    expect(starts.filter((item) => item.id === 'b')).toHaveLength(1);
+      async getServerNames() {
+        return {};
+      },
+      async getCatalog() {
+        return [];
+      },
+    } as unknown as DrovaApi;
+    const initial = await fetchSessionDataset(api, 'merchant-42');
+    const expanded = await loadMerchantSessionHistory(api, 'merchant-42');
+    expect(initial.sessions).toHaveLength(1);
+    expect(expanded).toHaveLength(1);
+    expect(calls).toEqual([
+      { merchantId: 'merchant-42', limit: MERCHANT_SESSION_INITIAL_LIMIT },
+      { merchantId: 'merchant-42', limit: MERCHANT_SESSION_EXPANDED_LIMIT },
+    ]);
   });
 
   it('merges partial results without losing the successful server markers', () => {
@@ -77,15 +81,15 @@ describe('session data', () => {
       serverNames: {},
       catalog: [],
       updatedAt: 1,
-      deepLoadedServerIds: [],
+      loadedLimit: MERCHANT_SESSION_INITIAL_LIMIT,
     };
     const merged = mergeSessionDataset(
       dataset,
       [session('b', 3, 4)],
-      ['server-b'],
+      MERCHANT_SESSION_EXPANDED_LIMIT,
     );
     expect(merged.sessions).toHaveLength(2);
-    expect(merged.deepLoadedServerIds).toEqual(['server-b']);
+    expect(merged.loadedLimit).toBe(MERCHANT_SESSION_EXPANDED_LIMIT);
   });
 
   it('exports only the provided visible fields and filtered rows', () => {

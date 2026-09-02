@@ -167,6 +167,39 @@ describe('Drova client', () => {
       'server_id=station-demo&limit=1',
     );
   });
+
+  it('loads analytics sessions from the merchant accounting endpoint', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request) =>
+      new Response(
+        JSON.stringify({
+          sessions: [
+            {
+              uuid: 'session-demo',
+              client_id: 'client-demo',
+              server_id: 'station-demo',
+              product_id: 'game-demo',
+              status: 'FINISHED',
+              created_on: 100,
+              finished_on: 200,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      createLiveApi('private-token-value').getMerchantSessions('merchant-demo', {
+        limit: 600,
+      }),
+    ).resolves.toHaveLength(1);
+    expect(requestUrl(fetchMock.mock.calls[0][0])).toBe(
+      'https://services.drova.io/accounting/merchant_sessions/merchant-demo?limit=600',
+    );
+    expect(requestUrl(fetchMock.mock.calls[0][0])).not.toContain(
+      '/session-manager/sessions',
+    );
+  });
 });
 
 function requestUrl(value: string | URL | Request) {

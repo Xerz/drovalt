@@ -1,27 +1,14 @@
 import type { CatalogProduct, DrovaApi, MerchantSession } from './types';
 
-export const SESSION_HISTORY_LIMIT = 1000;
-export const SESSION_HISTORY_MIN_INTERVAL_MS = 350;
+export const MERCHANT_SESSION_INITIAL_LIMIT = 600;
+export const MERCHANT_SESSION_EXPANDED_LIMIT = 1000;
 
 export type SessionDataset = {
   sessions: MerchantSession[];
   serverNames: Record<string, string>;
   catalog: CatalogProduct[];
   updatedAt: number;
-  deepLoadedServerIds: string[];
-};
-
-export type SessionHistoryProgress = {
-  completed: number;
-  total: number;
-  currentServerId?: string;
-  failedServerIds: string[];
-  stopped: boolean;
-};
-
-export type SessionHistoryResult = SessionHistoryProgress & {
-  sessions: MerchantSession[];
-  successfulServerIds: string[];
+  loadedLimit: number;
 };
 
 export function sessionKey(session: MerchantSession) {
@@ -58,9 +45,11 @@ export function uniqueSessionServerIds(sessions: MerchantSession[]) {
 
 export async function fetchSessionDataset(
   api: DrovaApi,
+  merchantId: string,
+  limit = MERCHANT_SESSION_INITIAL_LIMIT,
 ): Promise<SessionDataset> {
   const sessions = dedupeSessions(
-    await api.getSessions({ limit: SESSION_HISTORY_LIMIT }),
+    await api.getMerchantSessions(merchantId, { limit }),
   );
   const serverIds = uniqueSessionServerIds(sessions);
   const [namesResult, catalogResult] = await Promise.allSettled([
@@ -72,92 +61,30 @@ export async function fetchSessionDataset(
     serverNames: namesResult.status === 'fulfilled' ? namesResult.value : {},
     catalog: catalogResult.status === 'fulfilled' ? catalogResult.value : [],
     updatedAt: Date.now(),
-    deepLoadedServerIds: [],
+    loadedLimit: limit,
   };
 }
 
-export async function loadSessionHistory(
+export async function loadMerchantSessionHistory(
   api: DrovaApi,
-  serverIds: string[],
-  options: {
-    minIntervalMs?: number;
-    shouldStop?: () => boolean;
-    onProgress?: (progress: SessionHistoryProgress) => void;
-    onServerLoaded?: (serverId: string, sessions: MerchantSession[]) => void;
-  } = {},
-): Promise<SessionHistoryResult> {
-  const minIntervalMs =
-    options.minIntervalMs ?? SESSION_HISTORY_MIN_INTERVAL_MS;
-  const failedServerIds: string[] = [];
-  const successfulServerIds: string[] = [];
-  const sessions: MerchantSession[] = [];
-  let completed = 0;
-  let nextStartAt = 0;
-  let stopped = false;
-
-  for (const serverId of serverIds) {
-    if (options.shouldStop?.()) {
-      stopped = true;
-      break;
-    }
-    const waitMs = Math.max(0, nextStartAt - Date.now());
-    if (waitMs > 0)
-      await new Promise((resolve) => globalThis.setTimeout(resolve, waitMs));
-    if (options.shouldStop?.()) {
-      stopped = true;
-      break;
-    }
-    nextStartAt = Date.now() + Math.max(0, minIntervalMs);
-    options.onProgress?.({
-      completed,
-      total: serverIds.length,
-      currentServerId: serverId,
-      failedServerIds: [...failedServerIds],
-      stopped: false,
-    });
-    try {
-      const loaded = await api.getSessions({
-        serverId,
-        limit: SESSION_HISTORY_LIMIT,
-      });
-      sessions.push(...loaded);
-      successfulServerIds.push(serverId);
-      options.onServerLoaded?.(serverId, loaded);
-    } catch {
-      failedServerIds.push(serverId);
-    }
-    completed += 1;
-    options.onProgress?.({
-      completed,
-      total: serverIds.length,
-      currentServerId: serverId,
-      failedServerIds: [...failedServerIds],
-      stopped: false,
-    });
-  }
-
-  return {
-    sessions: dedupeSessions(sessions),
-    completed,
-    total: serverIds.length,
-    failedServerIds,
-    successfulServerIds,
-    stopped,
-  };
+  merchantId: string,
+  limit = MERCHANT_SESSION_EXPANDED_LIMIT,
+) {
+  return dedupeSessions(
+    await api.getMerchantSessions(merchantId, { limit }),
+  );
 }
 
 export function mergeSessionDataset(
   dataset: SessionDataset,
   incoming: MerchantSession[],
-  loadedServerIds: string[] = [],
+  loadedLimit = dataset.loadedLimit,
 ): SessionDataset {
   return {
     ...dataset,
     sessions: dedupeSessions([...dataset.sessions, ...incoming]),
     updatedAt: Date.now(),
-    deepLoadedServerIds: [
-      ...new Set([...dataset.deepLoadedServerIds, ...loadedServerIds]),
-    ].sort(),
+    loadedLimit: Math.max(dataset.loadedLimit, loadedLimit),
   };
 }
 

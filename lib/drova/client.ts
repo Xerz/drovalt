@@ -4,6 +4,7 @@ import {
   gameDetailSchema,
   gameSummarySchema,
   merchantSessionListSchema,
+  merchantSessionResponseSchema,
   stationSchema,
   unpaidStatsSchema,
   usageSchema,
@@ -88,12 +89,13 @@ export function createLiveApi(token: string): DrovaApi {
         ),
       );
     },
-    async getSessions({ serverId, limit = 1000 } = {}) {
+    async getMerchantSessions(merchantId, { limit = 600 } = {}) {
       const query = new URLSearchParams({ limit: String(limit) });
-      if (serverId) query.set('server_id', serverId);
-      return merchantSessionListSchema.parse(
-        await request(`/session-manager/sessions?${query}`),
-      ).sessions;
+      return merchantSessionResponseSchema.parse(
+        await request(
+          `/accounting/merchant_sessions/${encodeURIComponent(merchantId)}?${query}`,
+        ),
+      );
     },
     async getServerNames(serverIds) {
       if (!serverIds.length) return {};
