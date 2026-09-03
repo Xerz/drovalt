@@ -23,6 +23,11 @@ test('sessions table supports filters, detailed fields and manual history load',
   await page.goto('/sessions');
   await expect(page.getByRole('heading', { name: 'Сессии' })).toBeVisible();
   await expect(page.getByText('История сессий')).toBeVisible();
+  await page.getByRole('button', { name: 'Колонки' }).click();
+  await expect(page.getByText('Видимость колонок')).toBeVisible();
+  await page.getByRole('menuitemcheckbox', { name: 'IP' }).click();
+  await expect(page.getByRole('columnheader', { name: 'IP' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Все поля' }).click();
   await expect(page.getByText('UUID', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '7 дней' }).click();

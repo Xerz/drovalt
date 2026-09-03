@@ -50,6 +50,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -438,18 +439,22 @@ export function SessionsPage() {
                       Колонки
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuLabel>Видимость колонок</DropdownMenuLabel>
-                      {table.getAllLeafColumns().map((column) => (
-                        <DropdownMenuCheckboxItem
-                          key={column.id}
-                          checked={column.getIsVisible()}
-                          onCheckedChange={(checked) =>
-                            column.toggleVisibility(Boolean(checked))
-                          }
-                        >
-                          {columnLabel(column.id)}
-                        </DropdownMenuCheckboxItem>
-                      ))}
+                      <DropdownMenuGroup>
+                        <DropdownMenuLabel>
+                          Видимость колонок
+                        </DropdownMenuLabel>
+                        {table.getAllLeafColumns().map((column) => (
+                          <DropdownMenuCheckboxItem
+                            key={column.id}
+                            checked={column.getIsVisible()}
+                            onCheckedChange={(checked) =>
+                              column.toggleVisibility(Boolean(checked))
+                            }
+                          >
+                            {columnLabel(column.id)}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuGroup>
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <Button
