@@ -14,6 +14,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { useMerchant } from '@/components/merchant-context';
+import { PlayerActivityHover } from '@/components/player-activity-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ import {
   isStationOnline,
 } from '@/lib/drova/format';
 import { toStationApiTarget } from '@/lib/drova/client';
+import { buildPlayerActivityIndex } from '@/lib/drova/player-activity';
 import { mapLimited } from '@/lib/drova/sync';
 import type {
   CatalogProduct,
@@ -55,6 +57,7 @@ import type {
   StationFlag,
 } from '@/lib/drova/types';
 import { sanitizeDescriptionHtml } from '@/lib/security/sanitize-description';
+import { useSessionData } from '@/hooks/use-session-data';
 
 const descriptionSchema = z.object({
   description: z.string().max(12_000, 'Описание слишком длинное.'),
@@ -120,6 +123,7 @@ export function StationsPage() {
     enabled: Boolean(account),
     staleTime: 5 * 60_000,
   });
+  const sessionDataQuery = useSessionData();
   const catalogTitles = useMemo(
     () =>
       new Map(
@@ -129,6 +133,10 @@ export function StationsPage() {
         ]),
       ),
     [catalogQuery.data],
+  );
+  const playerActivity = useMemo(
+    () => buildPlayerActivityIndex(sessionDataQuery.data?.sessions ?? []),
+    [sessionDataQuery.data?.sessions],
   );
 
   const flagMutation = useMutation({
@@ -176,13 +184,15 @@ export function StationsPage() {
     stationsQuery.isFetching ||
     stationProductsQuery.isFetching ||
     latestSessionsQuery.isFetching ||
-    catalogQuery.isFetching;
+    catalogQuery.isFetching ||
+    sessionDataQuery.isFetching;
   const lastUpdatedAt =
     Math.max(
       stationsQuery.dataUpdatedAt,
       stationProductsQuery.dataUpdatedAt,
       latestSessionsQuery.dataUpdatedAt,
       catalogQuery.dataUpdatedAt,
+      sessionDataQuery.dataUpdatedAt,
     ) || null;
 
   const refreshAll = async () => {
@@ -191,6 +201,7 @@ export function StationsPage() {
       stationProductsQuery.refetch(),
       latestSessionsQuery.refetch(),
       catalogQuery.refetch(),
+      sessionDataQuery.refetch(),
     ]);
   };
 
@@ -338,9 +349,20 @@ export function StationsPage() {
                             )}
                           </p>
                           {latestClientId && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Клиент {latestClientId}
-                            </p>
+                            <div className="mt-0.5">
+                              <PlayerActivityHover
+                                clientLabel={latestClientId}
+                                activity={
+                                  latestSession.client_id
+                                    ? playerActivity.get(
+                                        latestSession.client_id.trim(),
+                                      )
+                                    : undefined
+                                }
+                                isLoading={sessionDataQuery.isPending}
+                                hasError={Boolean(sessionDataQuery.error)}
+                              />
+                            </div>
                           )}
                         </div>
                       ) : (
