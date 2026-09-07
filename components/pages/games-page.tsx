@@ -418,7 +418,7 @@ export function GamesPage() {
             title="По загруженной истории до 1000 сессий"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
-            Отыграно за 30 дней <ArrowUpDown />
+            За 30 дней <ArrowUpDown />
           </Button>
         ),
         cell: ({ row }) =>
