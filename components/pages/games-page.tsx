@@ -63,8 +63,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { useSessionData } from '@/hooks/use-session-data';
+import { formatDuration } from '@/lib/drova/format';
+import {
+  buildGamePlaytimeIndex,
+  hasCustomGameOverrides,
+} from '@/lib/drova/game-activity';
 import type {
   CatalogProduct,
+  DrovaApi,
   GameDetail,
   GameSummary,
   Station,
@@ -167,6 +174,7 @@ export function GamesPage() {
     queryFn: () => api.getProducts(selectedStationId),
     enabled: Boolean(selectedStationId && account),
   });
+  const sessionDataQuery = useSessionData();
 
   useEffect(() => {
     if (!productsQuery.data) return;
@@ -234,6 +242,14 @@ export function GamesPage() {
       selected.has(product.productId),
     );
   }, [productsQuery.data, selectedProductIds]);
+  const gamePlaytime = useMemo(
+    () =>
+      buildGamePlaytimeIndex(
+        sessionDataQuery.data?.sessions ?? [],
+        selectedStationId,
+      ),
+    [selectedStationId, sessionDataQuery.data?.sessions],
+  );
   const allVisibleSelected =
     visibleProducts.length > 0 &&
     visibleProducts.every((product) =>
@@ -258,7 +274,9 @@ export function GamesPage() {
         if (action === 'delete') {
           await bulkApi.deleteProduct(selectedStationId, product.productId);
           finalProducts = await bulkApi.getProducts(selectedStationId);
-          if (finalProducts.some((item) => item.productId === product.productId))
+          if (
+            finalProducts.some((item) => item.productId === product.productId)
+          )
             throw new Error(`Drova не подтвердил удаление «${product.title}».`);
         } else {
           const target = action === 'enable';
@@ -272,7 +290,9 @@ export function GamesPage() {
             product.productId,
           );
           if (readback.enabled !== target)
-            throw new Error(`Drova не подтвердил состояние «${product.title}».`);
+            throw new Error(
+              `Drova не подтвердил состояние «${product.title}».`,
+            );
         }
         setBulkProgress({ completed: index + 1, total: products.length });
       }
@@ -282,10 +302,7 @@ export function GamesPage() {
     },
     onMutate: () => setActionError(''),
     onSuccess: async (products) => {
-      queryClient.setQueryData(
-        ['products', mode, selectedStationId],
-        products,
-      );
+      queryClient.setQueryData(['products', mode, selectedStationId], products);
       setSelectedProductIds([]);
       setDeleteCandidates([]);
       await queryClient.invalidateQueries({ queryKey: ['stations', mode] });
@@ -295,7 +312,9 @@ export function GamesPage() {
     },
     onError: (error) => {
       setActionError(
-        error instanceof Error ? error.message : 'Массовая операция остановлена.',
+        error instanceof Error
+          ? error.message
+          : 'Массовая операция остановлена.',
       );
       void productsQuery.refetch();
     },
@@ -378,13 +397,46 @@ export function GamesPage() {
         ),
       },
       {
-        accessorKey: 'useDefaultDesktop',
+        id: 'settings',
         header: 'Настройки',
         cell: ({ row }) => (
-          <Badge variant="outline">
-            {row.original.useDefaultDesktop ? 'Стандартные' : 'Свои'}
-          </Badge>
+          <GameSettingsCell
+            api={bulkApi}
+            mode={mode}
+            stationId={selectedStationId}
+            productId={row.original.productId}
+          />
         ),
+        enableSorting: false,
+      },
+      {
+        id: 'playtime30d',
+        accessorFn: (product) => gamePlaytime.get(product.productId) ?? 0,
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            className="-ml-2"
+            title="По загруженной истории до 1000 сессий"
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          >
+            Отыграно за 30 дней <ArrowUpDown />
+          </Button>
+        ),
+        cell: ({ row }) =>
+          sessionDataQuery.isPending ? (
+            <Skeleton className="h-4 w-16" />
+          ) : sessionDataQuery.error ? (
+            <span
+              className="text-sm text-muted-foreground"
+              title="История сессий недоступна"
+            >
+              —
+            </span>
+          ) : (
+            <span className="text-sm font-medium tabular-nums">
+              {formatDuration(gamePlaytime.get(row.original.productId) ?? 0)}
+            </span>
+          ),
       },
       {
         accessorKey: 'enabled',
@@ -394,9 +446,9 @@ export function GamesPage() {
             checked={row.original.enabled}
             disabled={
               bulkMutation.isPending ||
-              enabledMutation.isPending &&
-              enabledMutation.variables?.product.productId ===
-                row.original.productId
+              (enabledMutation.isPending &&
+                enabledMutation.variables?.product.productId ===
+                  row.original.productId)
             }
             aria-label={`Включить ${row.original.title}`}
             onCheckedChange={(target) =>
@@ -435,9 +487,15 @@ export function GamesPage() {
     ],
     [
       allVisibleSelected,
+      bulkApi,
       bulkMutation.isPending,
       enabledMutation,
+      gamePlaytime,
+      mode,
       selectedProductIds,
+      selectedStationId,
+      sessionDataQuery.error,
+      sessionDataQuery.isPending,
       someVisibleSelected,
       visibleProducts,
     ],
@@ -476,12 +534,25 @@ export function GamesPage() {
             disabled={
               !selectedStationId ||
               productsQuery.isFetching ||
+              sessionDataQuery.isFetching ||
               bulkMutation.isPending
             }
-            onClick={() => void productsQuery.refetch()}
+            onClick={() =>
+              void Promise.all([
+                productsQuery.refetch(),
+                sessionDataQuery.refetch(),
+                queryClient.invalidateQueries({
+                  queryKey: ['product', mode, selectedStationId],
+                }),
+              ])
+            }
           >
             <RefreshCw
-              className={productsQuery.isFetching ? 'animate-spin' : ''}
+              className={
+                productsQuery.isFetching || sessionDataQuery.isFetching
+                  ? 'animate-spin'
+                  : ''
+              }
             />
             Обновить
           </Button>
@@ -651,7 +722,7 @@ export function GamesPage() {
           ) : productsQuery.isPending ? (
             <GamesSkeleton />
           ) : (
-            <div className="mt-4 overflow-hidden rounded-2xl border bg-card shadow-[0_18px_60px_-44px_rgb(0_0_0/0.45)]">
+            <div className="mt-4 overflow-x-auto rounded-2xl border bg-card shadow-[0_18px_60px_-44px_rgb(0_0_0/0.45)]">
               <Table>
                 <TableHeader className="bg-muted/45">
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -760,6 +831,64 @@ export function GamesPage() {
           })
         }
       />
+    </div>
+  );
+}
+
+function GameSettingsCell({
+  api,
+  mode,
+  stationId,
+  productId,
+}: {
+  api: DrovaApi;
+  mode: string;
+  stationId: string;
+  productId: string;
+}) {
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    const node = cellRef.current;
+    if (!node) return;
+    if (!('IntersectionObserver' in window)) {
+      setShouldLoad(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: '160px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [productId, stationId]);
+
+  const detailQuery = useQuery({
+    queryKey: ['product', mode, stationId, productId],
+    queryFn: () => api.getProduct(stationId, productId),
+    enabled: Boolean(shouldLoad && stationId && productId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  return (
+    <div ref={cellRef} className="min-w-24">
+      {!shouldLoad || detailQuery.isPending ? (
+        <Skeleton className="h-5 w-20 rounded-full" />
+      ) : detailQuery.error ? (
+        <Badge variant="outline" title="Не удалось прочитать настройки">
+          Неизвестно
+        </Badge>
+      ) : detailQuery.data ? (
+        <Badge variant="outline">
+          {hasCustomGameOverrides(detailQuery.data) ? 'Свои' : 'Стандартные'}
+        </Badge>
+      ) : null}
     </div>
   );
 }
@@ -1405,7 +1534,11 @@ function GameCopyDialog({
           )}
           {plan && !result && (
             <Button
-              variant={plan.scope === 'full' && counts?.remove ? 'destructive' : 'default'}
+              variant={
+                plan.scope === 'full' && counts?.remove
+                  ? 'destructive'
+                  : 'default'
+              }
               disabled={Boolean(progress)}
               onClick={() => void execute()}
             >
