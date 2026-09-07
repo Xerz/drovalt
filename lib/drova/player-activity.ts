@@ -22,6 +22,32 @@ export type PlayerActivity = {
   }>;
 };
 
+export function summarizeSessionDurations(
+  durations: readonly number[],
+): PlayerActivity {
+  const totalDurationMs = durations.reduce(
+    (total, duration) => total + duration,
+    0,
+  );
+  return {
+    sessionCount: durations.length,
+    totalDurationMs,
+    averageDurationMs: durations.length
+      ? totalDurationMs / durations.length
+      : 0,
+    histogram: durationBuckets.map((bucket, bucketIndex) => ({
+      key: bucket.key,
+      label: bucket.label,
+      count: durations.filter(
+        (duration) =>
+          duration < bucket.maxExclusive &&
+          (bucketIndex === 0 ||
+            duration >= durationBuckets[bucketIndex - 1].maxExclusive),
+      ).length,
+    })),
+  };
+}
+
 export function buildPlayerActivityIndex(
   sessions: readonly MerchantSession[],
   now = Date.now(),
@@ -49,26 +75,7 @@ export function buildPlayerActivityIndex(
 
   return new Map(
     [...durations].map(([clientId, clientDurations]) => {
-      const totalDurationMs = clientDurations.reduce(
-        (total, duration) => total + duration,
-        0,
-      );
-      const activity: PlayerActivity = {
-        sessionCount: clientDurations.length,
-        totalDurationMs,
-        averageDurationMs: totalDurationMs / clientDurations.length,
-        histogram: durationBuckets.map((bucket, bucketIndex) => ({
-          key: bucket.key,
-          label: bucket.label,
-          count: clientDurations.filter(
-            (duration) =>
-              duration < bucket.maxExclusive &&
-              (bucketIndex === 0 ||
-                duration >= durationBuckets[bucketIndex - 1].maxExclusive),
-          ).length,
-        })),
-      };
-      return [clientId, activity] as const;
+      return [clientId, summarizeSessionDurations(clientDurations)] as const;
     }),
   );
 }

@@ -64,7 +64,10 @@ export function PlayerActivityHover({
             Не удалось загрузить историю сессий.
           </p>
         ) : activity ? (
-          <PlayerActivitySummary activity={activity} />
+          <SessionActivitySummary
+            activity={activity}
+            histogramLabel="Гистограмма длительности сессий игрока"
+          />
         ) : (
           <p className="mt-4 text-sm text-muted-foreground">
             За последние 30 дней завершённых сессий нет.
@@ -75,7 +78,13 @@ export function PlayerActivityHover({
   );
 }
 
-function PlayerActivitySummary({ activity }: { activity: PlayerActivity }) {
+export function SessionActivitySummary({
+  activity,
+  histogramLabel,
+}: {
+  activity: PlayerActivity;
+  histogramLabel: string;
+}) {
   const maximum = Math.max(
     1,
     ...activity.histogram.map((bucket) => bucket.count),
@@ -106,9 +115,7 @@ function PlayerActivitySummary({ activity }: { activity: PlayerActivity }) {
           Распределение по длительности
         </p>
         <figure className="mt-2 grid h-24 grid-cols-5 items-end gap-2">
-          <figcaption className="sr-only">
-            Гистограмма длительности сессий игрока
-          </figcaption>
+          <figcaption className="sr-only">{histogramLabel}</figcaption>
           {activity.histogram.map((bucket) => (
             <div
               key={bucket.key}

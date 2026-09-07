@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildGamePlaytimeIndex,
+  buildGameActivityIndex,
   GAME_ACTIVITY_WINDOW_MS,
   hasCustomGameOverrides,
 } from '@/lib/drova/game-activity';
@@ -46,10 +46,21 @@ describe('game activity', () => {
       },
     ];
 
-    const totals = buildGamePlaytimeIndex(sessions, 'station-a', now);
+    const activity = buildGameActivityIndex(sessions, 'station-a', now);
 
-    expect(totals.get('game-a')).toBe(3 * 60 * 60_000);
-    expect(totals.get('game-b')).toBe(45 * 60_000);
+    expect(activity.get('game-a')).toMatchObject({
+      sessionCount: 2,
+      totalDurationMs: 3 * 60 * 60_000,
+      averageDurationMs: 1.5 * 60 * 60_000,
+      histogram: [
+        { label: 'до 15 м', count: 0 },
+        { label: '15–30 м', count: 0 },
+        { label: '30–60 м', count: 0 },
+        { label: '1–2 ч', count: 1 },
+        { label: '2+ ч', count: 1 },
+      ],
+    });
+    expect(activity.get('game-b')?.totalDurationMs).toBe(45 * 60_000);
   });
 });
 

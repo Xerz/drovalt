@@ -33,6 +33,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { useMerchant } from '@/components/merchant-context';
+import { GameActivityHover } from '@/components/game-activity-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -64,9 +65,8 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useSessionData } from '@/hooks/use-session-data';
-import { formatDuration } from '@/lib/drova/format';
 import {
-  buildGamePlaytimeIndex,
+  buildGameActivityIndex,
   hasCustomGameOverrides,
 } from '@/lib/drova/game-activity';
 import type {
@@ -242,9 +242,9 @@ export function GamesPage() {
       selected.has(product.productId),
     );
   }, [productsQuery.data, selectedProductIds]);
-  const gamePlaytime = useMemo(
+  const gameActivity = useMemo(
     () =>
-      buildGamePlaytimeIndex(
+      buildGameActivityIndex(
         sessionDataQuery.data?.sessions ?? [],
         selectedStationId,
       ),
@@ -411,7 +411,8 @@ export function GamesPage() {
       },
       {
         id: 'playtime30d',
-        accessorFn: (product) => gamePlaytime.get(product.productId) ?? 0,
+        accessorFn: (product) =>
+          gameActivity.get(product.productId)?.totalDurationMs ?? 0,
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -433,9 +434,10 @@ export function GamesPage() {
               —
             </span>
           ) : (
-            <span className="text-sm font-medium tabular-nums">
-              {formatDuration(gamePlaytime.get(row.original.productId) ?? 0)}
-            </span>
+            <GameActivityHover
+              gameTitle={row.original.title}
+              activity={gameActivity.get(row.original.productId)}
+            />
           ),
       },
       {
@@ -490,7 +492,7 @@ export function GamesPage() {
       bulkApi,
       bulkMutation.isPending,
       enabledMutation,
-      gamePlaytime,
+      gameActivity,
       mode,
       selectedProductIds,
       selectedStationId,
