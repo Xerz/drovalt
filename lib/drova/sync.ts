@@ -1,6 +1,6 @@
 import type { DrovaApi, GameDetail, GameSummary, ProductUpdate } from './types';
 
-export const GAME_SYNC_MIN_INTERVAL_MS = 50;
+export const GAME_SYNC_MIN_INTERVAL_MS = 5;
 
 export type SyncUpsert = {
   kind: 'add' | 'update';
