@@ -5,6 +5,7 @@ import {
   type GameDetail,
   type GameSummary,
   type MerchantSession,
+  type OpenedPrepaidDeal,
   type ProductUpdate,
   type Station,
   type StationFlag,
@@ -50,7 +51,7 @@ const initialStations: Station[] = [
     published: true,
     allow_desktop: true,
     disable_updates: false,
-    state: 'BUSY',
+    state: 'HANDSHAKE',
     product_list: ['game-01', 'game-02', 'game-03', 'game-07'],
   },
   {
@@ -178,6 +179,23 @@ const demoCatalog: CatalogProduct[] = Object.entries(catalog).map(
 );
 
 const demoSessions = makeDemoSessions();
+
+const openedPrepaidDeals: OpenedPrepaidDeal[] = [
+  {
+    created_on: now - 2 * 86_400_000,
+    dealId: 'demo-deal-01',
+    sum: 10_000,
+    payout: 7_200,
+    terminal_index: 1,
+  },
+  {
+    created_on: now - 8 * 86_400_000,
+    dealId: 'demo-deal-02',
+    sum: 8_420.5,
+    payout: 5_560,
+    terminal_index: 2,
+  },
+];
 
 function makeDemoSessions(): MerchantSession[] {
   const sessions: MerchantSession[] = [];
@@ -408,5 +426,6 @@ export function createDemoApi(): DrovaApi {
     },
     getUsage: () => pause(usage),
     getUnpaidStats: () => pause({ trial_msecs_left: 0 }),
+    getOpenedPrepaidDeals: () => pause(openedPrepaidDeals),
   };
 }

@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  formatClientIdSuffix,
   formatDuration,
   formatHeartbeat,
   getStationDisplayStatus,
@@ -294,6 +295,9 @@ export function StationsPage() {
                         product.productId === latestSession.product_id,
                     )?.title ?? catalogTitles.get(latestSession.product_id))
                   : undefined;
+                const latestClientId = formatClientIdSuffix(
+                  latestSession?.client_id,
+                );
                 return (
                   <TableRow key={station.uuid} className="h-[72px]">
                     <TableCell className="max-w-[320px] pl-5">
@@ -333,6 +337,11 @@ export function StationsPage() {
                               ),
                             )}
                           </p>
+                          {latestClientId && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Клиент {latestClientId}
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">

@@ -5,6 +5,7 @@ import {
   gameSummarySchema,
   merchantSessionListSchema,
   merchantSessionResponseSchema,
+  openedPrepaidDealsSchema,
   stationSchema,
   unpaidStatsSchema,
   usageSchema,
@@ -193,6 +194,11 @@ export function createLiveApi(token: string): DrovaApi {
         await request(
           `/accounting/unpayedstats/${encodeURIComponent(merchantId)}`,
         ),
+      );
+    },
+    async getOpenedPrepaidDeals() {
+      return openedPrepaidDealsSchema.parse(
+        await request('/accounting/tinkoff/prepaid/getOpenedDeals'),
       );
     },
   };

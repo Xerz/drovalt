@@ -45,6 +45,7 @@ import {
   integerFormatter,
   moneyFormatter,
 } from '@/lib/drova/format';
+import { summarizeOpenedPrepaidDeals } from '@/lib/drova/finance';
 import type { UsageStat } from '@/lib/drova/types';
 import { useSessionData } from '@/hooks/use-session-data';
 
@@ -79,7 +80,17 @@ export function StatisticsPage() {
     queryFn: () => api.getUnpaidStats(account!.uuid),
     enabled: Boolean(account),
   });
+  const openedDealsQuery = useQuery({
+    queryKey: ['opened-prepaid-deals', mode, account?.uuid],
+    queryFn: () => api.getOpenedPrepaidDeals(),
+    enabled: Boolean(account),
+  });
   const sessionsQuery = useSessionData();
+
+  const openedDealTotals = useMemo(
+    () => summarizeOpenedPrepaidDeals(openedDealsQuery.data ?? []),
+    [openedDealsQuery.data],
+  );
 
   const period = usageQuery.data?.[periodKey];
   const stationNames = useMemo(
@@ -120,14 +131,26 @@ export function StatisticsPage() {
     void usageQuery.refetch();
     void stationsQuery.refetch();
     void unpaidQuery.refetch();
+    void openedDealsQuery.refetch();
     void sessionsQuery.refetch();
   };
   const latestUpdatedAt = Math.max(
     usageQuery.dataUpdatedAt,
     stationsQuery.dataUpdatedAt,
     unpaidQuery.dataUpdatedAt,
+    openedDealsQuery.dataUpdatedAt,
     sessionsQuery.dataUpdatedAt,
   );
+  const isRefreshing =
+    usageQuery.isFetching ||
+    stationsQuery.isFetching ||
+    unpaidQuery.isFetching ||
+    openedDealsQuery.isFetching ||
+    sessionsQuery.isFetching;
+  const openedDealsError =
+    openedDealsQuery.error instanceof Error
+      ? openedDealsQuery.error.message
+      : undefined;
 
   if (!account) {
     return (
@@ -161,7 +184,7 @@ export function StatisticsPage() {
         periodKey={periodKey}
         setPeriodKey={setPeriodKey}
         refresh={refresh}
-        disabled={usageQuery.isFetching || sessionsQuery.isFetching}
+        disabled={isRefreshing}
         updatedAt={latestUpdatedAt}
       />
 
@@ -302,17 +325,21 @@ export function StatisticsPage() {
         <div className="flex items-center gap-2">
           <WalletCards className="size-5 text-primary" />
           <h2 className="text-lg font-semibold tracking-tight">
-            Деньги и лимиты
+            Открытые выплаты и лимиты
           </h2>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <MoneyCard
-            label="Баланс аккаунта"
-            value={moneyFormatter.format(account.balance ?? 0)}
+            label="Сумма открытых выплат"
+            value={moneyFormatter.format(openedDealTotals.gross)}
+            hint={`Открытых выплат: ${integerFormatter.format(openedDealsQuery.data?.length ?? 0)}`}
+            error={openedDealsError}
           />
           <MoneyCard
-            label="Доступно к выводу"
-            value={moneyFormatter.format(account.exportable_money ?? 0)}
+            label="К выплате после комиссий"
+            value={moneyFormatter.format(openedDealTotals.payout)}
+            hint="После комиссии сервиса и платёжной системы"
+            error={openedDealsError}
           />
           <MoneyCard
             label="Пробный лимит"
@@ -327,19 +354,6 @@ export function StatisticsPage() {
                 : undefined
             }
           />
-          <Card className="border-dashed">
-            <CardHeader className="pb-2">
-              <CardDescription>Prepaid-показатели</CardDescription>
-              <CardTitle className="text-base">
-                Ожидают свежего capture
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs leading-5 text-muted-foreground">
-                Endpoint не вызывается, пока контракт снова не подтверждён.
-              </p>
-            </CardContent>
-          </Card>
         </div>
       </section>
     </div>
@@ -436,10 +450,12 @@ function MetricCard({
 function MoneyCard({
   label,
   value,
+  hint,
   error,
 }: {
   label: string;
   value: string;
+  hint?: string;
   error?: string;
 }) {
   return (
@@ -449,6 +465,9 @@ function MoneyCard({
         <CardTitle className="text-2xl tabular-nums">
           {error ? 'Недоступно' : value}
         </CardTitle>
+        {!error && hint && (
+          <p className="text-xs leading-5 text-muted-foreground">{hint}</p>
+        )}
       </CardHeader>
       {error && (
         <CardContent>

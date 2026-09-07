@@ -7,7 +7,11 @@ import {
   toStationApiTarget,
   toVerifiedWriteState,
 } from '@/lib/drova/client';
-import { getStationDisplayStatus } from '@/lib/drova/format';
+import {
+  formatClientIdSuffix,
+  getStationDisplayStatus,
+} from '@/lib/drova/format';
+import { summarizeOpenedPrepaidDeals } from '@/lib/drova/finance';
 
 describe('Drova client', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -86,12 +90,63 @@ describe('Drova client', () => {
       'Используется',
     );
     expect(getStationDisplayStatus('BUSY', recent).label).toBe('Используется');
+    expect(getStationDisplayStatus('HANDSHAKE', recent).label).toBe(
+      'Используется',
+    );
+    expect(getStationDisplayStatus('LISTEN', recent, 'HANDSHAKE').label).toBe(
+      'Используется',
+    );
     expect(getStationDisplayStatus('UNVERIFIED', recent).label).toBe(
       'Не проверена',
     );
     expect(getStationDisplayStatus(null, Date.now() - 600_000).label).toBe(
       'Не в сети',
     );
+  });
+
+  it('shows only the last six client id characters in station summaries', () => {
+    expect(formatClientIdSuffix('730f2f5d-aa6a-a1ff-6dd4-bf33e6a2252e')).toBe(
+      '…a2252e',
+    );
+    expect(formatClientIdSuffix('abc123')).toBe('abc123');
+    expect(formatClientIdSuffix(null)).toBeNull();
+  });
+
+  it('loads open payout gross and post-commission amounts', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify([
+            {
+              created_on: 123,
+              dealId: 'deal-demo',
+              sum: 1000,
+              payout: 780,
+              terminal_index: 1,
+            },
+          ]),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      createLiveApi('private-token-value').getOpenedPrepaidDeals(),
+    ).resolves.toEqual([
+      expect.objectContaining({ sum: 1000, payout: 780 }),
+    ]);
+    expect(new URL(requestUrl(fetchMock.mock.calls[0][0])).pathname).toBe(
+      '/accounting/tinkoff/prepaid/getOpenedDeals',
+    );
+  });
+
+  it('sums gross and post-commission values across all open payouts', () => {
+    expect(
+      summarizeOpenedPrepaidDeals([
+        { created_on: 1, sum: 1000, payout: 780 },
+        { created_on: 2, sum: 250.5, payout: 190.25 },
+        { created_on: 3, sum: null, payout: null },
+      ]),
+    ).toEqual({ gross: 1250.5, payout: 970.25 });
   });
 
   it('adds a missing product with POST and no request body', async () => {

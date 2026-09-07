@@ -34,7 +34,9 @@ export function isStationOnline(
 ) {
   if (
     state &&
-    ['ONLINE', 'READY', 'LISTEN', 'BUSY'].includes(state.toUpperCase())
+    ['ONLINE', 'READY', 'LISTEN', 'BUSY', 'HANDSHAKE'].includes(
+      state.toUpperCase(),
+    )
   )
     return true;
   return Boolean(heartbeat && Date.now() - heartbeat < 5 * 60_000);
@@ -48,8 +50,8 @@ export function getStationDisplayStatus(
   const online = isStationOnline(state, heartbeat);
   if (!online) return { label: 'Не в сети', dotClass: 'bg-slate-400' };
   if (
-    state?.toUpperCase() === 'BUSY' ||
-    latestSessionStatus?.toUpperCase() === 'ACTIVE'
+    ['BUSY', 'HANDSHAKE'].includes(state?.toUpperCase() ?? '') ||
+    ['ACTIVE', 'HANDSHAKE'].includes(latestSessionStatus?.toUpperCase() ?? '')
   ) {
     return { label: 'Используется', dotClass: 'bg-amber-500' };
   }
@@ -57,4 +59,10 @@ export function getStationDisplayStatus(
     return { label: 'Не проверена', dotClass: 'bg-sky-500' };
   }
   return { label: 'Готова', dotClass: 'bg-emerald-500' };
+}
+
+export function formatClientIdSuffix(clientId?: string | null) {
+  const value = clientId?.trim();
+  if (!value) return null;
+  return value.length > 6 ? `…${value.slice(-6)}` : value;
 }

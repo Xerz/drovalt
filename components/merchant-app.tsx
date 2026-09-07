@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, BarChart3, Clock3, Gamepad2, Menu, Monitor, Moon, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { AlertTriangle, BarChart3, Clock3, Code2, Gamepad2, Menu, Monitor, Moon, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { useMerchant } from '@/components/merchant-context';
@@ -170,7 +170,18 @@ function SidebarContent({ route, navigate }: { route: AppRoute; navigate(route: 
       </nav>
 
       <Separator className="my-5" />
-      <p className="px-3 text-xs leading-5 text-muted-foreground">Прямое подключение к services.drova.io без промежуточного сервера.</p>
+      <div className="space-y-3 px-3">
+        <p className="text-xs leading-5 text-muted-foreground">Прямое подключение к services.drova.io без промежуточного сервера.</p>
+        <a
+          href="https://github.com/Xerz/drovalt"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <Code2 className="size-4" />
+          Исходный код и self-hosting
+        </a>
+      </div>
 
       <div className="mt-auto rounded-2xl border border-primary/15 bg-primary/5 p-3.5">
         <div className="flex items-center gap-2 text-sm font-medium">

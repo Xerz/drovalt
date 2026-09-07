@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test';
 
+test('stations show handshake as occupied and shorten the latest client id', async ({
+  page,
+}) => {
+  await page.goto('/stations');
+  const station = page
+    .getByRole('row')
+    .filter({ hasText: 'Орбита · RTX 4070 Ti' });
+  await expect(station.getByText('Используется')).toBeVisible();
+  await expect(station.getByText('Клиент …nt-007')).toBeVisible();
+});
+
 test('personal statistics stays on the merchant summary page', async ({
   page,
 }) => {
@@ -15,6 +26,11 @@ test('personal statistics stays on the merchant summary page', async ({
   await expect(page.getByText(/завершённых сессий/)).toBeVisible();
   await expect(page.getByText('Топ-10 игроков', { exact: true })).toBeVisible();
   await expect(page.getByText('Топ-10 игр', { exact: true })).toBeVisible();
+  await expect(page.getByText('Сумма открытых выплат')).toBeVisible();
+  await expect(page.getByText('К выплате после комиссий')).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Исходный код и self-hosting' }),
+  ).toHaveAttribute('href', 'https://github.com/Xerz/drovalt');
 });
 
 test('sessions table supports filters, detailed fields and manual history load', async ({

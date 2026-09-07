@@ -85,6 +85,18 @@ export const unpaidStatsSchema = z.object({
   trial_msecs_left: z.number().nullable().optional(),
 });
 
+export const openedPrepaidDealSchema = z
+  .object({
+    created_on: z.number(),
+    dealId: z.string().nullable().optional(),
+    payout: z.number().nullable().optional(),
+    sum: z.number().nullable().optional(),
+    terminal_index: z.number().nullable().optional(),
+  })
+  .catchall(z.unknown());
+
+export const openedPrepaidDealsSchema = z.array(openedPrepaidDealSchema);
+
 export const prepaidStatsSchema = z.object({
   allowed_to_sell_minutes: z.number(),
   sold_minutes: z.number(),
@@ -135,6 +147,7 @@ export type UsagePeriod = z.infer<typeof usagePeriodSchema>;
 export type Usage = z.infer<typeof usageSchema>;
 export type UnpaidStats = z.infer<typeof unpaidStatsSchema>;
 export type PrepaidStats = z.infer<typeof prepaidStatsSchema>;
+export type OpenedPrepaidDeal = z.infer<typeof openedPrepaidDealSchema>;
 
 export type StationFlag = 'published' | 'allow_desktop' | 'disable_updates';
 
@@ -185,4 +198,5 @@ export interface DrovaApi {
   ): Promise<void>;
   getUsage(): Promise<Usage>;
   getUnpaidStats(merchantId: string): Promise<UnpaidStats>;
+  getOpenedPrepaidDeals(): Promise<OpenedPrepaidDeal[]>;
 }
