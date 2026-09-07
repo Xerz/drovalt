@@ -34,6 +34,7 @@ import { z } from 'zod';
 
 import { useMerchant } from '@/components/merchant-context';
 import { GameActivityHover } from '@/components/game-activity-hover';
+import { GameSettingsHover } from '@/components/game-settings-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -65,10 +66,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useSessionData } from '@/hooks/use-session-data';
-import {
-  buildGameActivityIndex,
-  hasCustomGameOverrides,
-} from '@/lib/drova/game-activity';
+import { buildGameActivityIndex } from '@/lib/drova/game-activity';
 import type {
   CatalogProduct,
   DrovaApi,
@@ -887,9 +885,7 @@ function GameSettingsCell({
           Неизвестно
         </Badge>
       ) : detailQuery.data ? (
-        <Badge variant="outline">
-          {hasCustomGameOverrides(detailQuery.data) ? 'Свои' : 'Стандартные'}
-        </Badge>
+        <GameSettingsHover detail={detailQuery.data} />
       ) : null}
     </div>
   );

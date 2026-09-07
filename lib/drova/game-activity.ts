@@ -15,6 +15,54 @@ export function hasCustomGameOverrides(
   ].some((value) => value !== null);
 }
 
+export type EffectiveGameSetting = {
+  key: 'gamePath' | 'workPath' | 'allowedPaths' | 'args';
+  label: string;
+  value: string | null;
+  isCustom: boolean;
+};
+
+export function getEffectiveGameSettings(
+  product: Pick<
+    GameDetail,
+    | 'gamePath'
+    | 'workPath'
+    | 'allowedPaths'
+    | 'args'
+    | 'defaultGamePath'
+    | 'defaultWorkPath'
+    | 'defaultAllowedPaths'
+    | 'defaultArgs'
+  >,
+): EffectiveGameSetting[] {
+  return [
+    {
+      key: 'gamePath',
+      label: 'Путь к игре',
+      value: product.gamePath ?? product.defaultGamePath,
+      isCustom: product.gamePath !== null,
+    },
+    {
+      key: 'workPath',
+      label: 'Рабочая папка',
+      value: product.workPath ?? product.defaultWorkPath,
+      isCustom: product.workPath !== null,
+    },
+    {
+      key: 'allowedPaths',
+      label: 'Разрешённые пути',
+      value: product.allowedPaths ?? product.defaultAllowedPaths,
+      isCustom: product.allowedPaths !== null,
+    },
+    {
+      key: 'args',
+      label: 'Параметры запуска',
+      value: product.args ?? product.defaultArgs,
+      isCustom: product.args !== null,
+    },
+  ];
+}
+
 export function buildGameActivityIndex(
   sessions: readonly MerchantSession[],
   serverId: string,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGameActivityIndex,
   GAME_ACTIVITY_WINDOW_MS,
+  getEffectiveGameSettings,
   hasCustomGameOverrides,
 } from '@/lib/drova/game-activity';
 import type { GameDetail, MerchantSession } from '@/lib/drova/types';
@@ -12,6 +13,37 @@ describe('game activity', () => {
     expect(hasCustomGameOverrides(game(null, null, null, null))).toBe(false);
     expect(hasCustomGameOverrides(game('', null, null, null))).toBe(true);
     expect(hasCustomGameOverrides(game(null, null, null, '-high'))).toBe(true);
+  });
+
+  it('shows effective paths while preserving empty custom overrides', () => {
+    const detail = game(null, '', 'D:\\Shared', null);
+
+    expect(getEffectiveGameSettings(detail)).toEqual([
+      {
+        key: 'gamePath',
+        label: 'Путь к игре',
+        value: 'C:\\Games\\Game.exe',
+        isCustom: false,
+      },
+      {
+        key: 'workPath',
+        label: 'Рабочая папка',
+        value: '',
+        isCustom: true,
+      },
+      {
+        key: 'allowedPaths',
+        label: 'Разрешённые пути',
+        value: 'D:\\Shared',
+        isCustom: true,
+      },
+      {
+        key: 'args',
+        label: 'Параметры запуска',
+        value: '',
+        isCustom: false,
+      },
+    ]);
   });
 
   it('sums session overlap from the last 30 days for the selected station', () => {
