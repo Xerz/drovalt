@@ -57,6 +57,7 @@ import type {
   StationFlag,
 } from '@/lib/drova/types';
 import { sanitizeDescriptionHtml } from '@/lib/security/sanitize-description';
+import { cn } from '@/lib/utils';
 import { useSessionData } from '@/hooks/use-session-data';
 
 const descriptionSchema = z.object({
@@ -312,7 +313,18 @@ export function StationsPage() {
                 return (
                   <TableRow key={station.uuid} className="h-[72px]">
                     <TableCell className="max-w-[320px] pl-5">
-                      <p className="truncate font-medium">{station.name}</p>
+                      <p
+                        className={cn(
+                          'truncate font-medium',
+                          !station.published && 'text-muted-foreground',
+                          !isStationOnline(
+                            station.state,
+                            station.last_heartbeat,
+                          ) && 'line-through',
+                        )}
+                      >
+                        {station.name}
+                      </p>
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {station.uuid}
                       </p>
