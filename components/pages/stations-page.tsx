@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 import { useMerchant } from '@/components/merchant-context';
 import { PlayerActivityHover } from '@/components/player-activity-hover';
+import { StationActivityHover } from '@/components/station-activity-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ import {
 } from '@/lib/drova/format';
 import { toStationApiTarget } from '@/lib/drova/client';
 import { buildPlayerActivityIndex } from '@/lib/drova/player-activity';
+import { buildStationActivityIndex } from '@/lib/drova/station-activity';
 import { mapLimited } from '@/lib/drova/sync';
 import type {
   GameSummary,
@@ -60,7 +62,7 @@ import { cn } from '@/lib/utils';
 import { useSessionData } from '@/hooks/use-session-data';
 import { useCatalog } from '@/hooks/use-catalog';
 import { useMinuteClock } from '@/hooks/use-minute-clock';
-import { isCurrentSession, sessionDisplayTiming } from '@/lib/drova/session-display';
+import { sessionDisplayTiming } from '@/lib/drova/session-display';
 
 const descriptionSchema = z.object({
   description: z.string().max(12_000, 'Описание слишком длинное.'),
@@ -121,9 +123,7 @@ export function StationsPage() {
     staleTime: 15_000,
   });
   const catalogQuery = useCatalog();
-  const now = useMinuteClock(Object.values(latestSessionsQuery.data ?? {}).some(
-    (session) => session != null && isCurrentSession(session),
-  ));
+  const now = useMinuteClock(Boolean(account));
   const sessionDataQuery = useSessionData();
   const catalogTitles = useMemo(
     () =>
@@ -138,6 +138,10 @@ export function StationsPage() {
   const playerActivity = useMemo(
     () => buildPlayerActivityIndex(sessionDataQuery.data?.sessions ?? []),
     [sessionDataQuery.data?.sessions],
+  );
+  const stationActivity = useMemo(
+    () => buildStationActivityIndex(sessionDataQuery.data?.sessions ?? [], now),
+    [sessionDataQuery.data?.sessions, now],
   );
 
   const flagMutation = useMutation({
@@ -283,6 +287,10 @@ export function StationsPage() {
                 <TableHead className="h-11 pl-5">Станция</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead>Последняя сессия</TableHead>
+                <TableHead>
+                  Длинные сессии
+                  <span className="block text-xs font-normal text-muted-foreground">30 дней</span>
+                </TableHead>
                 <TableHead>Игры</TableHead>
                 <TableHead className="text-center">Публикация</TableHead>
                 <TableHead className="text-center">Рабочий стол</TableHead>
@@ -379,6 +387,14 @@ export function StationsPage() {
                           Сессий нет
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <StationActivityHover
+                        stationName={station.name}
+                        activity={stationActivity.get(station.uuid)}
+                        isLoading={sessionDataQuery.isPending}
+                        hasError={Boolean(sessionDataQuery.error)}
+                      />
                     </TableCell>
                     <TableCell>
                       {Array.isArray(productList) ? (
