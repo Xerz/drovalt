@@ -60,6 +60,7 @@ export function uniqueSessionServerIds(sessions: MerchantSession[]) {
 export async function fetchSessionDataset(
   api: DrovaApi,
   merchantId: string,
+  loadCatalog: () => Promise<CatalogProduct[]> = () => api.getCatalog(),
 ): Promise<SessionDataset> {
   const sessions = dedupeSessions(
     await api.getSessions({
@@ -69,7 +70,7 @@ export async function fetchSessionDataset(
   );
   const [stationsResult, catalogResult] = await Promise.allSettled([
     api.getStations(merchantId),
-    api.getCatalog(),
+    loadCatalog(),
   ]);
   const stations =
     stationsResult.status === 'fulfilled' ? stationsResult.value : [];

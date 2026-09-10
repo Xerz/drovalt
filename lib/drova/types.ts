@@ -36,6 +36,7 @@ export const catalogProductSchema = z.object({
   productId: z.string(),
   title: z.string(),
   displayName: z.string().optional(),
+  requiredAccount: z.string().nullable().optional(),
   useDefaultDesktop: z.boolean().nullable().optional(),
 });
 

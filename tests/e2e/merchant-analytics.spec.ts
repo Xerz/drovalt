@@ -45,7 +45,7 @@ test('sessions table supports filters, detailed fields and manual history load',
   await expect(page.getByRole('columnheader', { name: 'IP' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Все поля' }).click();
-  await expect(page.getByText('UUID', { exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'UUID', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '7 дней' }).click();
   await page.getByRole('button', { name: 'Загрузить ещё' }).click();
   await expect(

@@ -174,8 +174,18 @@ const initialProducts: Record<string, GameDetail[]> = {
   ],
 };
 
+const demoGameMetadata: Record<string, Pick<CatalogProduct, 'requiredAccount' | 'useDefaultDesktop'>> = {
+  'game-01': { requiredAccount: 'Steam', useDefaultDesktop: false },
+  'game-02': { requiredAccount: 'Steam', useDefaultDesktop: false },
+  'game-03': { requiredAccount: 'Steam', useDefaultDesktop: true },
+  'game-04': { requiredAccount: 'Xbox', useDefaultDesktop: false },
+  'game-05': { requiredAccount: null, useDefaultDesktop: false },
+  'game-06': { requiredAccount: 'Epic Games', useDefaultDesktop: false },
+  'game-07': { requiredAccount: 'Gaijin', useDefaultDesktop: true },
+  'game-08': { requiredAccount: 'GOG', useDefaultDesktop: false },
+};
 const demoCatalog: CatalogProduct[] = Object.entries(catalog).map(
-  ([productId, [title]]) => ({ productId, title, displayName: title }),
+  ([productId, [title]]) => ({ productId, title, displayName: title, ...demoGameMetadata[productId] }),
 );
 
 const demoSessions = makeDemoSessions();
@@ -252,8 +262,7 @@ function summary(value: GameDetail): GameSummary {
     enabled: value.enabled,
     verified: value.verified,
     available: value.available,
-    useDefaultDesktop:
-      !value.gamePath && !value.workPath && !value.allowedPaths && !value.args,
+    useDefaultDesktop: demoGameMetadata[value.productId]?.useDefaultDesktop === true,
     needVpn: false,
   };
 }

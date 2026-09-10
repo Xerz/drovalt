@@ -50,7 +50,6 @@ import { toStationApiTarget } from '@/lib/drova/client';
 import { buildPlayerActivityIndex } from '@/lib/drova/player-activity';
 import { mapLimited } from '@/lib/drova/sync';
 import type {
-  CatalogProduct,
   GameSummary,
   MerchantSession,
   Station,
@@ -59,6 +58,9 @@ import type {
 import { sanitizeDescriptionHtml } from '@/lib/security/sanitize-description';
 import { cn } from '@/lib/utils';
 import { useSessionData } from '@/hooks/use-session-data';
+import { useCatalog } from '@/hooks/use-catalog';
+import { useMinuteClock } from '@/hooks/use-minute-clock';
+import { isCurrentSession, sessionDisplayTiming } from '@/lib/drova/session-display';
 
 const descriptionSchema = z.object({
   description: z.string().max(12_000, 'Описание слишком длинное.'),
@@ -118,12 +120,10 @@ export function StationsPage() {
     enabled: Boolean(account && stations.length),
     staleTime: 15_000,
   });
-  const catalogQuery = useQuery<CatalogProduct[]>({
-    queryKey: ['catalog', mode],
-    queryFn: () => api.getCatalog(),
-    enabled: Boolean(account),
-    staleTime: 5 * 60_000,
-  });
+  const catalogQuery = useCatalog();
+  const now = useMinuteClock(Object.values(latestSessionsQuery.data ?? {}).some(
+    (session) => session != null && isCurrentSession(session),
+  ));
   const sessionDataQuery = useSessionData();
   const catalogTitles = useMemo(
     () =>
@@ -296,6 +296,7 @@ export function StationsPage() {
                   flagMutation.isPending && pendingId === station.uuid;
                 const productList = stationProductsQuery.data?.[station.uuid];
                 const latestSession = latestSessionsQuery.data?.[station.uuid];
+                const timing = latestSession ? sessionDisplayTiming(latestSession, now) : null;
                 const displayStatus = getStationDisplayStatus(
                   station.state,
                   station.last_heartbeat,
@@ -351,14 +352,10 @@ export function StationsPage() {
                             {latestGameTitle ?? 'Название недоступно'}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {formatHeartbeat(latestSession.created_on)} ·{' '}
-                            {formatDuration(
-                              Math.max(
-                                0,
-                                (latestSession.finished_on ?? Date.now()) -
-                                  latestSession.created_on,
-                              ),
+                            {!timing?.ongoing && Number.isFinite(latestSession.created_on) && (
+                              <>{formatHeartbeat(latestSession.created_on)} · </>
                             )}
+                            {timing?.duration != null ? formatDuration(timing.duration) : '—'}
                           </p>
                           {latestClientId && (
                             <div className="mt-0.5">

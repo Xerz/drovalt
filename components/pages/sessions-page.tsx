@@ -71,6 +71,9 @@ import {
 } from '@/hooks/use-session-data';
 import { getGeoIp, type GeoIpResult } from '@/lib/drova/geoip';
 import { buildSessionCsv } from '@/lib/drova/session-csv';
+import { useMinuteClock } from '@/hooks/use-minute-clock';
+import { isCurrentSession, sessionDisplayTiming } from '@/lib/drova/session-display';
+import { formatDuration as formatElapsedDuration } from '@/lib/drova/format';
 import {
   catalogNameMap,
   loadSessionHistory,
@@ -116,6 +119,7 @@ export function SessionsPage() {
   const { api, account, mode, setSettingsOpen } = useMerchant();
   const queryClient = useQueryClient();
   const sessionsQuery = useSessionData();
+  const now = useMinuteClock((sessionsQuery.data?.sessions ?? []).some(isCurrentSession));
   const [detailed, setDetailed] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -243,7 +247,7 @@ export function SessionsPage() {
       textColumn('productName', 'Игра', (row) => row.productName, 190),
       textColumn('serverName', 'Станция', (row) => row.serverName, 170),
       dateColumn('createdAt', 'Начало', (row) => row.createdAt),
-      durationColumn('duration', 'Длительность', (row) => row.duration),
+      durationColumn('duration', 'Длительность', (row) => row.duration, now),
       textColumn('billing', 'Billing', (row) => row.billing, 105),
       dateColumn('finishedAt', 'Окончание', (row) => row.finishedAt),
       textColumn('score', 'Score', (row) => row.score, 82),
@@ -267,7 +271,7 @@ export function SessionsPage() {
         210,
       ),
     ];
-  }, [detailed]);
+  }, [detailed, now]);
 
   const table = useReactTable({
     data: dateFilteredRows,
@@ -766,16 +770,20 @@ function durationColumn(
   id: string,
   header: string,
   accessor: (row: SessionRow) => number | null,
+  now: number,
 ): ColumnDef<SessionRow> {
   return {
     id,
     header,
     accessorFn: accessor,
-    size: 115,
-    cell: ({ getValue }) =>
-      typeof getValue() === 'number'
-        ? formatDuration(getValue() as number)
-        : 'Идёт',
+    size: 190,
+    cell: ({ row }) => {
+      const timing = sessionDisplayTiming(row.original.source, now);
+      if (timing.duration == null) return '—';
+      return timing.ongoing
+        ? `Идёт (${formatElapsedDuration(timing.duration)})`
+        : formatDuration(timing.duration);
+    },
   };
 }
 

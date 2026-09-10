@@ -66,6 +66,8 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useSessionData } from '@/hooks/use-session-data';
+import { useCatalog } from '@/hooks/use-catalog';
+import { ALL_PLATFORMS, filterGames, gamePlatformMap, platformLabel, stationPlatforms, type GameFilter } from '@/lib/drova/game-platforms';
 import { buildGameActivityIndex } from '@/lib/drova/game-activity';
 import type {
   CatalogProduct,
@@ -85,8 +87,6 @@ import {
   type SyncOverrideKey,
   type SyncProgress,
 } from '@/lib/drova/sync';
-
-type GameFilter = 'all' | 'enabled' | 'disabled';
 
 const formSchema = z.object({
   gamePath: z.string().max(2_000),
@@ -125,6 +125,7 @@ export function GamesPage() {
   const [selectedStationId, setSelectedStationId] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GameFilter>('all');
+  const [platform, setPlatform] = useState(ALL_PLATFORMS);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [editingProductId, setEditingProductId] = useState('');
   const [addOpen, setAddOpen] = useState(false);
@@ -173,6 +174,16 @@ export function GamesPage() {
     enabled: Boolean(selectedStationId && account),
   });
   const sessionDataQuery = useSessionData();
+  const catalogQuery = useCatalog();
+  const platforms = useMemo(() => gamePlatformMap(catalogQuery.data ?? []), [catalogQuery.data]);
+  const platformOptions = useMemo(
+    () => stationPlatforms(productsQuery.data ?? [], platforms),
+    [productsQuery.data, platforms],
+  );
+  const platformReady = catalogQuery.isSuccess;
+  const effectivePlatform = platformReady && platformOptions.includes(platform)
+    ? platform : ALL_PLATFORMS;
+  useEffect(() => setPlatform(ALL_PLATFORMS), [selectedStationId]);
 
   useEffect(() => {
     if (!productsQuery.data) return;
@@ -222,17 +233,8 @@ export function GamesPage() {
   });
 
   const visibleProducts = useMemo(
-    () =>
-      (productsQuery.data ?? []).filter((product) => {
-        const matchesSearch = product.title
-          .toLocaleLowerCase('ru')
-          .includes(search.trim().toLocaleLowerCase('ru'));
-        const matchesFilter =
-          filter === 'all' ||
-          (filter === 'enabled' ? product.enabled : !product.enabled);
-        return matchesSearch && matchesFilter;
-      }),
-    [productsQuery.data, search, filter],
+    () => filterGames(productsQuery.data ?? [], platforms, search, filter, effectivePlatform),
+    [productsQuery.data, platforms, search, filter, effectivePlatform],
   );
   const selectedProducts = useMemo(() => {
     const selected = new Set(selectedProductIds);
@@ -370,6 +372,11 @@ export function GamesPage() {
         cell: ({ row }) => (
           <div className="max-w-[420px]">
             <p className="truncate font-medium">{row.original.title}</p>
+            {row.original.useDefaultDesktop && (
+              <Badge variant="outline" className="mt-1 border-primary/30 text-primary">
+                Требует Desktop
+              </Badge>
+            )}
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {row.original.productId}
             </p>
@@ -540,6 +547,7 @@ export function GamesPage() {
             onClick={() =>
               void Promise.all([
                 productsQuery.refetch(),
+                catalogQuery.refetch(),
                 sessionDataQuery.refetch(),
                 queryClient.invalidateQueries({
                   queryKey: ['product', mode, selectedStationId],
@@ -646,6 +654,21 @@ export function GamesPage() {
                 </NativeSelectOption>
               </NativeSelect>
             </div>
+            <NativeSelect
+              value={effectivePlatform}
+              disabled={!platformReady || bulkMutation.isPending}
+              onChange={(event) => setPlatform(event.target.value)}
+              aria-label="Платформа"
+            >
+              <NativeSelectOption value={ALL_PLATFORMS}>
+                {catalogQuery.isError ? 'Платформы недоступны' : catalogQuery.isPending ? 'Загрузка платформ…' : 'Все платформы'}
+              </NativeSelectOption>
+              {platformOptions.map((value) => (
+                <NativeSelectOption key={value} value={value}>
+                  {platformLabel(value)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
           </div>
 
           {selectedProducts.length > 0 && (
@@ -920,12 +943,7 @@ function AddGameDialog({
     }
   }, [open]);
 
-  const catalogQuery = useQuery({
-    queryKey: ['catalog', mode],
-    queryFn: () => api.getCatalog(),
-    enabled: open,
-    staleTime: 5 * 60_000,
-  });
+  const catalogQuery = useCatalog(open);
   const existingIds = useMemo(
     () => new Set([...products.map((item) => item.productId), ...addedIds]),
     [products, addedIds],

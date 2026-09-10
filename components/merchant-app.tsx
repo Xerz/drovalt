@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, BarChart3, Clock3, Code2, Gamepad2, Menu, Monitor, Moon, Settings, ShieldCheck, Sun } from 'lucide-react';
+import { AlertTriangle, BarChart3, Clock3, Code2, Gamepad2, Menu, MessageCircle, Monitor, Moon, Send, Settings, ShieldCheck, Sun } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { useMerchant } from '@/components/merchant-context';
@@ -171,6 +171,15 @@ function SidebarContent({ route, navigate }: { route: AppRoute; navigate(route: 
 
       <Separator className="my-5" />
       <div className="space-y-3 px-3">
+        {[
+          { label: 'Чат Drova на сайте', href: 'https://drova.io/woody', icon: MessageCircle },
+          { label: 'Чат Drova в Telegram', href: 'https://t.me/drovatalk', icon: Send },
+        ].map(({ label, href, icon: Icon }) => (
+          <a key={href} href={href} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            <Icon className="size-4 shrink-0" />{label}
+          </a>
+        ))}
         <p className="text-xs leading-5 text-muted-foreground">Прямое подключение к services.drova.io без промежуточного сервера.</p>
         <a
           href="https://github.com/Xerz/drovalt"
