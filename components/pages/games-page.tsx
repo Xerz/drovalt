@@ -25,14 +25,16 @@ import {
   Search,
   Server,
   Settings2,
+  Settings,
   SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { useMerchant } from '@/components/merchant-context';
+import { AddedGameEacSuggestion, EacStationDialog } from '@/components/eac-path-tools';
 import { GameActivityHover } from '@/components/game-activity-hover';
 import { GameSettingsHover } from '@/components/game-settings-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -130,6 +132,7 @@ export function GamesPage() {
   const [editingProductId, setEditingProductId] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [eacOpen, setEacOpen] = useState(false);
   const [actionError, setActionError] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [deleteCandidates, setDeleteCandidates] = useState<GameSummary[]>([]);
@@ -268,9 +271,13 @@ export function GamesPage() {
       action: 'enable' | 'disable' | 'delete';
       products: GameSummary[];
     }) => {
-      setBulkProgress({ completed: 0, total: products.length });
+      const productsToChange = products.filter(
+        (product) => action === 'delete' || product.enabled !== (action === 'enable'),
+      );
+      setBulkProgress({ completed: 0, total: productsToChange.length });
       let finalProducts = productsQuery.data ?? [];
-      for (const [index, product] of products.entries()) {
+      if (!productsToChange.length) return finalProducts;
+      for (const [index, product] of productsToChange.entries()) {
         if (action === 'delete') {
           await bulkApi.deleteProduct(selectedStationId, product.productId);
           finalProducts = await bulkApi.getProducts(selectedStationId);
@@ -294,7 +301,7 @@ export function GamesPage() {
               `Drova не подтвердил состояние «${product.title}».`,
             );
         }
-        setBulkProgress({ completed: index + 1, total: products.length });
+        setBulkProgress({ completed: index + 1, total: productsToChange.length });
       }
       if (action !== 'delete')
         finalProducts = await bulkApi.getProducts(selectedStationId);
@@ -577,6 +584,14 @@ export function GamesPage() {
           </Button>
           <Button
             variant="outline"
+            disabled={!account || !selectedStationId || productsQuery.isPending || bulkMutation.isPending || enabledMutation.isPending}
+            onClick={() => setEacOpen(true)}
+          >
+            <Settings2 />
+            Проверить пути EAC
+          </Button>
+          <Button
+            variant="outline"
             disabled={
               stations.length < 2 ||
               !selectedStationId ||
@@ -685,7 +700,11 @@ export function GamesPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={bulkMutation.isPending}
+                  disabled={
+                    bulkMutation.isPending ||
+                    enabledMutation.isPending ||
+                    !selectedProducts.some((product) => product.enabled)
+                  }
                   onClick={() =>
                     bulkMutation.mutate({
                       action: 'disable',
@@ -699,7 +718,11 @@ export function GamesPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={bulkMutation.isPending}
+                  disabled={
+                    bulkMutation.isPending ||
+                    enabledMutation.isPending ||
+                    !selectedProducts.some((product) => !product.enabled)
+                  }
                   onClick={() =>
                     bulkMutation.mutate({
                       action: 'enable',
@@ -828,7 +851,16 @@ export function GamesPage() {
         productId={editingProductId}
         onOpenChange={(open) => !open && setEditingProductId('')}
       />
+      {eacOpen && <EacStationDialog
+        key={`eac:${mode}:${selectedStationId}`}
+        api={bulkApi}
+        stationId={selectedStationId}
+        stationName={selectedStation?.name}
+        onClose={() => setEacOpen(false)}
+      />}
       <AddGameDialog
+        key={`add:${mode}:${selectedStationId}`}
+        requestApi={bulkApi}
         open={addOpen}
         onOpenChange={setAddOpen}
         stationId={selectedStationId}
@@ -915,29 +947,38 @@ function GameSettingsCell({
 }
 
 function AddGameDialog({
+  requestApi,
   open,
   onOpenChange,
   stationId,
   stationName,
   products,
 }: {
+  requestApi: DrovaApi;
   open: boolean;
   onOpenChange(open: boolean): void;
   stationId: string;
   stationName?: string;
   products: GameSummary[];
 }) {
-  const { api, mode } = useMerchant();
+  const { mode } = useMerchant();
+  const api = requestApi;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [addedIds, setAddedIds] = useState<string[]>([]);
+  const [addedGames, setAddedGames] = useState<Record<string, GameDetail>>({});
+  const [dismissedEac, setDismissedEac] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState('');
+  const [eacBusy, setEacBusy] = useState(false);
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (!open) {
       setSearch('');
-      setAddedIds([]);
+      setAddedGames({});
+      setDismissedEac({});
+      setEditingId('');
       setError('');
       setSuccess('');
     }
@@ -945,13 +986,17 @@ function AddGameDialog({
 
   const catalogQuery = useCatalog(open);
   const existingIds = useMemo(
-    () => new Set([...products.map((item) => item.productId), ...addedIds]),
-    [products, addedIds],
+    () => new Set(products.map((item) => item.productId)),
+    [products],
   );
   const candidates = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('ru');
     return (catalogQuery.data ?? [])
-      .filter((item) => !existingIds.has(item.productId))
+      .filter(
+        (item) =>
+          Boolean(addedGames[item.productId]) ||
+          !existingIds.has(item.productId),
+      )
       .filter((item) => {
         const title =
           `${item.displayName ?? ''} ${item.title}`.toLocaleLowerCase('ru');
@@ -961,7 +1006,7 @@ function AddGameDialog({
         productTitle(left).localeCompare(productTitle(right), 'ru'),
       )
       .slice(0, 100);
-  }, [catalogQuery.data, existingIds, search]);
+  }, [catalogQuery.data, existingIds, addedGames, search]);
 
   const addMutation = useMutation({
     retry: 0,
@@ -976,8 +1021,15 @@ function AddGameDialog({
       setError('');
       setSuccess('');
     },
-    onSuccess: async ({ product }) => {
-      setAddedIds((current) => [...current, product.productId]);
+    onSuccess: async ({ product, readback }) => {
+      setAddedGames((current) => ({
+        ...current,
+        [product.productId]: readback,
+      }));
+      queryClient.setQueryData(
+        ['product', mode, stationId, product.productId],
+        readback,
+      );
       setSuccess(`«${productTitle(product)}» добавлена на станцию.`);
       await queryClient.invalidateQueries({
         queryKey: ['products', mode, stationId],
@@ -993,9 +1045,18 @@ function AddGameDialog({
       ),
   });
 
+  const busy = addMutation.isPending || eacBusy;
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-2xl">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!busy && !editingId) onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent
+        className="max-h-[90vh] overflow-hidden sm:max-w-2xl"
+        showCloseButton={!busy}
+      >
         <DialogHeader>
           <DialogTitle>Добавить игру</DialogTitle>
           <DialogDescription>
@@ -1006,6 +1067,7 @@ function AddGameDialog({
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            disabled={busy}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-9"
@@ -1040,29 +1102,67 @@ function AddGameDialog({
                 addMutation.isPending &&
                 addMutation.variables?.productId === product.productId;
               return (
-                <div
+                <fieldset
                   key={product.productId}
-                  className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
+                  aria-label={`Игра ${productTitle(product)}`}
+                  className="min-w-0 rounded-xl border bg-card px-3 py-2.5"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {productTitle(product)}
-                    </p>
-                    {product.displayName &&
-                      product.displayName !== product.title && (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {product.title}
-                        </p>
-                      )}
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {productTitle(product)}
+                      </p>
+                      {product.displayName &&
+                        product.displayName !== product.title && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {product.title}
+                          </p>
+                        )}
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={busy || Boolean(addedGames[product.productId])}
+                      onClick={() => addMutation.mutate(product)}
+                    >
+                      {addedGames[product.productId]
+                        ? 'Добавлено'
+                        : pending
+                          ? 'Добавляем…'
+                          : 'Добавить'}
+                    </Button>
+                    {addedGames[product.productId] && (
+                      <Button
+                        size="icon-sm"
+                        variant="outline"
+                        disabled={busy}
+                        title="Настройки игры"
+                        aria-label={`Настройки игры ${productTitle(product)}`}
+                        onClick={(event) => {
+                          settingsButtonRef.current = event.currentTarget;
+                          setEditingId(product.productId);
+                        }}
+                      >
+                        <Settings />
+                      </Button>
+                    )}
                   </div>
-                  <Button
-                    size="sm"
-                    disabled={addMutation.isPending}
-                    onClick={() => addMutation.mutate(product)}
-                  >
-                    {pending ? 'Добавляем…' : 'Добавить'}
-                  </Button>
-                </div>
+                  {addedGames[product.productId] && (
+                    <AddedGameEacSuggestion
+                      api={api}
+                      stationId={stationId}
+                      detail={addedGames[product.productId]}
+                      disabled={busy || Boolean(editingId)}
+                      onBusyChange={setEacBusy}
+                      dismissed={dismissedEac[product.productId] ?? ''}
+                      onDismiss={(fingerprint) =>
+                        setDismissedEac((current) => ({
+                          ...current,
+                          [product.productId]: fingerprint,
+                        }))
+                      }
+                    />
+                  )}
+                </fieldset>
               );
             })
           ) : (
@@ -1079,13 +1179,22 @@ function AddGameDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            disabled={addMutation.isPending}
+            disabled={busy}
             onClick={() => onOpenChange(false)}
           >
             Закрыть
           </Button>
         </DialogFooter>
       </DialogContent>
+      <GameEditDialog
+        stationId={stationId}
+        productId={editingId}
+        requestApi={api}
+        finalFocus={settingsButtonRef}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditingId('');
+        }}
+      />
     </Dialog>
   );
 }
@@ -1153,15 +1262,20 @@ function DeleteGamesDialog({
 }
 
 function GameEditDialog({
+  requestApi,
+  finalFocus,
   stationId,
   productId,
   onOpenChange,
 }: {
+  requestApi?: DrovaApi;
+  finalFocus?: RefObject<HTMLElement | null>;
   stationId: string;
   productId: string;
   onOpenChange(open: boolean): void;
 }) {
-  const { api, mode } = useMerchant();
+  const { api: merchantApi, mode } = useMerchant();
+  const api = requestApi ?? merchantApi;
   const queryClient = useQueryClient();
   const [useDefault, setUseDefault] = useState<Record<OverrideKey, boolean>>({
     gamePath: true,
@@ -1236,15 +1350,24 @@ function GameEditDialog({
   });
 
   return (
-    <Dialog open={Boolean(productId)} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+    <Dialog
+      open={Boolean(productId)}
+      onOpenChange={(open) => {
+        if (!form.formState.isSubmitting) onOpenChange(open);
+      }}
+    >
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"
+        showCloseButton={!form.formState.isSubmitting}
+        finalFocus={finalFocus}
+      >
         <DialogHeader>
           <DialogTitle>
             {detailQuery.data?.title ?? 'Настройки игры'}
           </DialogTitle>
           <DialogDescription>
-            Пустой override со включённым стандартным значением отправляется как
-            null.
+            Изменения применяются к этой игре на выбранной станции. Кнопка
+            «Стандартное» возвращает значение из каталога.
           </DialogDescription>
         </DialogHeader>
         {detailQuery.isPending ? (
@@ -1323,7 +1446,11 @@ function GameEditDialog({
           </Alert>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            disabled={form.formState.isSubmitting}
+            onClick={() => onOpenChange(false)}
+          >
             Отмена
           </Button>
           <Button
