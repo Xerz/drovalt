@@ -32,6 +32,7 @@ export function isStationOnline(
   state?: string | null,
   heartbeat?: number | null,
 ) {
+  if (state?.toUpperCase() === 'OFFLINE') return false;
   if (
     state &&
     ['ONLINE', 'READY', 'LISTEN', 'BUSY', 'HANDSHAKE'].includes(

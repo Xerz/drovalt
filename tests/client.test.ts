@@ -10,6 +10,7 @@ import {
 import {
   formatClientIdSuffix,
   getStationDisplayStatus,
+  isStationOnline,
 } from '@/lib/drova/format';
 import { summarizeOpenedPrepaidDeals } from '@/lib/drova/finance';
 
@@ -99,6 +100,13 @@ describe('Drova client', () => {
     expect(getStationDisplayStatus('UNVERIFIED', recent).label).toBe(
       'Не проверена',
     );
+    for (const state of ['OFFLINE', 'offline']) {
+      expect(isStationOnline(state, recent)).toBe(false);
+      expect(getStationDisplayStatus(state, recent).label).toBe('Не в сети');
+      expect(getStationDisplayStatus(state, recent, 'ACTIVE').label).toBe(
+        'Не в сети',
+      );
+    }
     expect(getStationDisplayStatus(null, Date.now() - 600_000).label).toBe(
       'Не в сети',
     );
