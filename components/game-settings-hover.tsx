@@ -39,6 +39,7 @@ export function GameSettingsHover({ detail }: { detail: GameDetail }) {
         </Badge>
       </HoverCardTrigger>
       <HoverCardContent
+        aria-label={`Пути и запуск ${detail.title}`}
         side="right"
         align="start"
         sideOffset={10}

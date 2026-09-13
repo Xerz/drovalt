@@ -37,6 +37,7 @@ export function PlayerActivityHover({
         Клиент {clientLabel}
       </HoverCardTrigger>
       <HoverCardContent
+        aria-label={`Активность игрока ${clientLabel}`}
         side="right"
         align="start"
         sideOffset={10}

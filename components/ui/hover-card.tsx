@@ -1,16 +1,21 @@
 'use client';
 
-import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card';
+import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 
 import { cn } from '@/lib/utils';
 
-function HoverCard({ ...props }: PreviewCardPrimitive.Root.Props) {
-  return <PreviewCardPrimitive.Root data-slot="hover-card" {...props} />;
+// Detail cards open on hover, touch, or keyboard activation.
+function HoverCard({ ...props }: PopoverPrimitive.Root.Props) {
+  return <PopoverPrimitive.Root data-slot="hover-card" {...props} />;
 }
 
-function HoverCardTrigger({ ...props }: PreviewCardPrimitive.Trigger.Props) {
+function HoverCardTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
   return (
-    <PreviewCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
+    <PopoverPrimitive.Trigger
+      data-slot="hover-card-trigger"
+      openOnHover
+      {...props}
+    />
   );
 }
 
@@ -21,30 +26,30 @@ function HoverCardContent({
   align = 'center',
   alignOffset = 4,
   ...props
-}: PreviewCardPrimitive.Popup.Props &
+}: PopoverPrimitive.Popup.Props &
   Pick<
-    PreviewCardPrimitive.Positioner.Props,
+    PopoverPrimitive.Positioner.Props,
     'align' | 'alignOffset' | 'side' | 'sideOffset'
   >) {
   return (
-    <PreviewCardPrimitive.Portal data-slot="hover-card-portal">
-      <PreviewCardPrimitive.Positioner
+    <PopoverPrimitive.Portal data-slot="hover-card-portal">
+      <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
         className="isolate z-50"
       >
-        <PreviewCardPrimitive.Popup
+        <PopoverPrimitive.Popup
           data-slot="hover-card-content"
           className={cn(
-            'data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 bg-popover text-popover-foreground w-64 rounded-lg p-2.5 text-sm shadow-md ring-1 duration-100 data-[side=inline-start]:slide-in-from-right-2 data-[side=inline-end]:slide-in-from-left-2 z-50 origin-(--transform-origin) outline-hidden',
+            'data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 bg-popover text-popover-foreground w-64 max-w-[calc(100vw-2rem)] max-h-(--available-height) overflow-y-auto rounded-lg p-2.5 text-sm shadow-md ring-1 duration-100 data-[side=inline-start]:slide-in-from-right-2 data-[side=inline-end]:slide-in-from-left-2 z-50 origin-(--transform-origin) outline-hidden',
             className,
           )}
           {...props}
         />
-      </PreviewCardPrimitive.Positioner>
-    </PreviewCardPrimitive.Portal>
+      </PopoverPrimitive.Positioner>
+    </PopoverPrimitive.Portal>
   );
 }
 

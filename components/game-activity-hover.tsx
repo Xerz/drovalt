@@ -28,6 +28,7 @@ export function GameActivityHover({
         render={
           <button
             type="button"
+            aria-label={`Активность игры ${gameTitle}: ${displayedDuration}`}
             className="rounded-sm text-sm font-medium tabular-nums underline decoration-dotted underline-offset-3 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         }
@@ -35,6 +36,7 @@ export function GameActivityHover({
         {displayedDuration}
       </HoverCardTrigger>
       <HoverCardContent
+        aria-label={`Активность игры ${gameTitle}`}
         side="right"
         align="start"
         sideOffset={10}

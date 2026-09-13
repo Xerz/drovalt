@@ -46,6 +46,7 @@ export function StationActivityHover({
         {isLoading ? <Skeleton className="h-5 w-12" /> : percentage}
       </HoverCardTrigger>
       <HoverCardContent
+        aria-label={`Активность станции ${stationName}`}
         side="right"
         align="start"
         sideOffset={10}
