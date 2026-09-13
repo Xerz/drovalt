@@ -69,7 +69,11 @@ const descriptionSchema = z.object({
 });
 type DescriptionForm = z.infer<typeof descriptionSchema>;
 
-export function StationsPage() {
+export function StationsPage({
+  onOpenGames,
+}: {
+  onOpenGames(stationId: string): void;
+}) {
   const { api, account, mode, setSettingsOpen } = useMerchant();
   const queryClient = useQueryClient();
   const [editingStation, setEditingStation] = useState<Station | null>(null);
@@ -398,8 +402,9 @@ export function StationsPage() {
                     </TableCell>
                     <TableCell>
                       {Array.isArray(productList) ? (
-                        <a
-                          href={`/games?station=${encodeURIComponent(station.uuid)}`}
+                        <button
+                          type="button"
+                          onClick={() => onOpenGames(station.uuid)}
                           className="inline-flex rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                           aria-label={`Открыть ${productList.length} игр станции ${station.name}`}
                         >
@@ -409,7 +414,7 @@ export function StationsPage() {
                           >
                             {productList.length}
                           </Badge>
-                        </a>
+                        </button>
                       ) : productList === null ? (
                         <Badge
                           variant="outline"

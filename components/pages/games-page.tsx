@@ -121,10 +121,15 @@ const fieldMeta: Array<{
   },
 ];
 
-export function GamesPage() {
+export function GamesPage({
+  selectedStationId,
+  onStationChange,
+}: {
+  selectedStationId: string;
+  onStationChange(stationId: string): void;
+}) {
   const { api, account, mode, setSettingsOpen } = useMerchant();
   const queryClient = useQueryClient();
-  const [selectedStationId, setSelectedStationId] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<GameFilter>('all');
   const [platform, setPlatform] = useState(ALL_PLATFORMS);
@@ -137,7 +142,6 @@ export function GamesPage() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [deleteCandidates, setDeleteCandidates] = useState<GameSummary[]>([]);
   const [bulkProgress, setBulkProgress] = useState({ completed: 0, total: 0 });
-  const stationRouteApplied = useRef(false);
   const bulkApi = useMemo(
     () => (mode === 'live' ? createGameRequestLimitedApi(api) : api),
     [api, mode],
@@ -155,26 +159,18 @@ export function GamesPage() {
 
   useEffect(() => {
     if (!stations.length) return;
-    if (!stationRouteApplied.current) {
-      stationRouteApplied.current = true;
-      const requestedStation = new URLSearchParams(window.location.search).get(
-        'station',
-      );
-      if (stations.some((station) => station.uuid === requestedStation)) {
-        setSelectedStationId(requestedStation!);
-        return;
-      }
-    }
     if (!stations.some((station) => station.uuid === selectedStationId))
-      setSelectedStationId(stations[0].uuid);
-  }, [stations, selectedStationId]);
+      onStationChange(stations[0].uuid);
+  }, [stations, selectedStationId, onStationChange]);
 
   useEffect(() => setSelectedProductIds([]), [selectedStationId]);
 
   const productsQuery = useQuery({
     queryKey: ['products', mode, selectedStationId],
     queryFn: () => api.getProducts(selectedStationId),
-    enabled: Boolean(selectedStationId && account),
+    enabled: Boolean(
+      account && stations.some((station) => station.uuid === selectedStationId),
+    ),
   });
   const sessionDataQuery = useSessionData();
   const catalogQuery = useCatalog();
@@ -630,7 +626,7 @@ export function GamesPage() {
                 className="w-full"
                 value={selectedStationId}
                 disabled={bulkMutation.isPending}
-                onChange={(event) => setSelectedStationId(event.target.value)}
+                onChange={(event) => onStationChange(event.target.value)}
               >
                 {stations.map((station) => (
                   <NativeSelectOption key={station.uuid} value={station.uuid}>

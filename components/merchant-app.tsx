@@ -1,7 +1,7 @@
 'use client';
 
 import { AlertTriangle, BarChart3, Clock3, Code2, Gamepad2, Menu, MessageCircle, Monitor, Moon, Send, Settings, ShieldCheck, Sun } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useMerchant } from '@/components/merchant-context';
 import { GamesPage } from '@/components/pages/games-page';
@@ -46,6 +46,7 @@ export function MerchantApp({ initialRoute = 'stations' }: { initialRoute?: AppR
   const merchant = useMerchant();
   const [route, setRoute] = useState<AppRoute>(initialRoute);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [selectedGameStationId, setSelectedGameStationId] = useState('');
 
   useEffect(() => {
     setRoute(currentBrowserRoute());
@@ -72,12 +73,21 @@ export function MerchantApp({ initialRoute = 'stations' }: { initialRoute?: AppR
     setMobileOpen(false);
   };
 
-  const content = useMemo(() => {
-    if (route === 'games') return <GamesPage />;
-    if (route === 'statistics') return <StatisticsPage />;
-    if (route === 'sessions') return <SessionsPage />;
-    return <StationsPage />;
-  }, [route]);
+  const content = route === 'games' ? (
+    <GamesPage
+      selectedStationId={selectedGameStationId}
+      onStationChange={setSelectedGameStationId}
+    />
+  ) : route === 'statistics' ? (
+    <StatisticsPage />
+  ) : route === 'sessions' ? (
+    <SessionsPage />
+  ) : (
+    <StationsPage onOpenGames={(stationId) => {
+      setSelectedGameStationId(stationId);
+      navigate('games');
+    }} />
+  );
 
   return (
     <main className="min-h-screen bg-background text-foreground">
