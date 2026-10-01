@@ -71,6 +71,12 @@ test.describe('touch cards', () => {
       await popup.getByText(card.content, { exact: true }).tap();
       await expect(popup).toBeVisible();
       // Wait for placement and the opening animation to settle before measuring.
+      if (card.name === 'game settings') {
+        await page.screenshot({
+          path: testInfo.outputPath('game-settings-card.png'),
+          animations: 'disabled',
+        });
+      }
       await expect(popup).toBeInViewport({ ratio: 1 });
       const box = await popup.boundingBox();
       const viewport = await page.evaluate(() => ({

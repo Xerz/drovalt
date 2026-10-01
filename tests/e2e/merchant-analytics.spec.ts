@@ -11,20 +11,38 @@ test('stations show handshake as occupied and shorten the latest client id', asy
   await expect(station.getByText('Клиент …nt-007')).toBeVisible();
 });
 
-test('stations show the long-session share and a 30-day duration summary', async ({ page }) => {
+test('stations show the long-session share and a 30-day duration summary', async ({
+  page,
+}) => {
   await page.goto('/stations');
-  await expect(page.getByRole('columnheader', { name: /Длинные сессии/ })).toBeVisible();
-  const station = page.getByRole('row').filter({ hasText: 'Орбита · RTX 4070 Ti' });
+  await expect(
+    page.getByRole('columnheader', { name: /Длинные сессии/ }),
+  ).toBeVisible();
+  const station = page
+    .getByRole('row')
+    .filter({ hasText: 'Орбита · RTX 4070 Ti' });
   const share = station.getByRole('button', { name: /Длинные сессии станции/ });
   // Every completed demo session lasts at least 18 minutes; the active one
   // must not lower the share or appear in the duration distribution.
   await expect(share).toHaveText(/100\s*%/);
   await share.hover();
-  await expect(page.getByText('Активность станции', { exact: true })).toBeVisible();
-  await expect(page.getByText(/Больше 15 минут:/)).toBeVisible();
-  await expect(page.getByText('Завершённые сессии, начавшиеся за последние 30 дней.')).toBeVisible();
-  await expect(page.getByRole('figure').filter({ hasText: 'Гистограмма длительности сессий станции' })).toBeVisible();
-  await expect(page.getByText('По загруженной истории сессий. Активные сессии не учитываются.')).toBeVisible();
+  await expect(
+    page.getByText('Активность станции', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/От 15 минут:/)).toBeVisible();
+  await expect(
+    page.getByText('Завершённые сессии, начавшиеся за последние 30 дней.'),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('figure')
+      .filter({ hasText: 'Гистограмма длительности сессий станции' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      'По загруженной истории сессий. Активные сессии не учитываются.',
+    ),
+  ).toBeVisible();
 });
 
 test('personal statistics stays on the merchant summary page', async ({
@@ -61,7 +79,9 @@ test('sessions table supports filters, detailed fields and manual history load',
   await expect(page.getByRole('columnheader', { name: 'IP' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Все поля' }).click();
-  await expect(page.getByRole('columnheader', { name: 'UUID', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('columnheader', { name: 'UUID', exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: '7 дней' }).click();
   await page.getByRole('button', { name: 'Загрузить ещё' }).click();
   await expect(

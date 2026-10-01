@@ -3,6 +3,12 @@ import type { MerchantSession } from './types';
 const DAY_MS = 86_400_000;
 export const PLAYER_ACTIVITY_WINDOW_MS = 30 * DAY_MS;
 
+export type DurationBucket = {
+  key: string;
+  label: string;
+  maxExclusive: number;
+};
+
 const durationBuckets = [
   { key: 'under-15', label: 'до 15 м', maxExclusive: 15 * 60_000 },
   { key: '15-30', label: '15–30 м', maxExclusive: 30 * 60_000 },
@@ -24,6 +30,7 @@ export type PlayerActivity = {
 
 export function summarizeSessionDurations(
   durations: readonly number[],
+  buckets: readonly DurationBucket[] = durationBuckets,
 ): PlayerActivity {
   const totalDurationMs = durations.reduce(
     (total, duration) => total + duration,
@@ -35,14 +42,14 @@ export function summarizeSessionDurations(
     averageDurationMs: durations.length
       ? totalDurationMs / durations.length
       : 0,
-    histogram: durationBuckets.map((bucket, bucketIndex) => ({
+    histogram: buckets.map((bucket, bucketIndex) => ({
       key: bucket.key,
       label: bucket.label,
       count: durations.filter(
         (duration) =>
           duration < bucket.maxExclusive &&
           (bucketIndex === 0 ||
-            duration >= durationBuckets[bucketIndex - 1].maxExclusive),
+            duration >= buckets[bucketIndex - 1].maxExclusive),
       ).length,
     })),
   };

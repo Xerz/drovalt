@@ -82,9 +82,13 @@ export function PlayerActivityHover({
 export function SessionActivitySummary({
   activity,
   histogramLabel,
+  totalDurationDetail,
+  extraMetric,
 }: {
   activity: PlayerActivity;
   histogramLabel: string;
+  totalDurationDetail?: string;
+  extraMetric?: { label: string; value: string };
 }) {
   const maximum = Math.max(
     1,
@@ -93,7 +97,9 @@ export function SessionActivitySummary({
 
   return (
     <div className="mt-4">
-      <div className="grid grid-cols-3 gap-2">
+      <div
+        className={`grid gap-2 ${extraMetric ? 'grid-cols-2' : 'grid-cols-3'}`}
+      >
         <CompactMetric
           icon={<UsersRound className="size-3.5" />}
           label="Сессии"
@@ -103,12 +109,20 @@ export function SessionActivitySummary({
           icon={<Clock3 className="size-3.5" />}
           label="Всего"
           value={formatDuration(activity.totalDurationMs)}
+          detail={totalDurationDetail}
         />
         <CompactMetric
           icon={<Clock3 className="size-3.5" />}
           label="Средняя"
           value={formatDuration(activity.averageDurationMs)}
         />
+        {extraMetric && (
+          <CompactMetric
+            icon={<Clock3 className="size-3.5" />}
+            label={extraMetric.label}
+            value={extraMetric.value}
+          />
+        )}
       </div>
 
       <div className="mt-4">
@@ -155,10 +169,12 @@ function CompactMetric({
   icon,
   label,
   value,
+  detail,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  detail?: string;
 }) {
   return (
     <div className="min-w-0 rounded-lg bg-muted/60 px-2.5 py-2">
@@ -169,6 +185,11 @@ function CompactMetric({
       <p className="mt-1 truncate text-sm font-semibold tabular-nums">
         {value}
       </p>
+      {detail && (
+        <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+          {detail}
+        </p>
+      )}
     </div>
   );
 }

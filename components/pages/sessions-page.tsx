@@ -55,6 +55,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card';
 import { Progress, ProgressLabel } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -72,7 +77,10 @@ import {
 import { getGeoIp, type GeoIpResult } from '@/lib/drova/geoip';
 import { buildSessionCsv } from '@/lib/drova/session-csv';
 import { useMinuteClock } from '@/hooks/use-minute-clock';
-import { isCurrentSession, sessionDisplayTiming } from '@/lib/drova/session-display';
+import {
+  isCurrentSession,
+  sessionDisplayTiming,
+} from '@/lib/drova/session-display';
 import { formatDuration as formatElapsedDuration } from '@/lib/drova/format';
 import {
   catalogNameMap,
@@ -119,7 +127,9 @@ export function SessionsPage() {
   const { api, account, mode, setSettingsOpen } = useMerchant();
   const queryClient = useQueryClient();
   const sessionsQuery = useSessionData();
-  const now = useMinuteClock((sessionsQuery.data?.sessions ?? []).some(isCurrentSession));
+  const now = useMinuteClock(
+    (sessionsQuery.data?.sessions ?? []).some(isCurrentSession),
+  );
   const [detailed, setDetailed] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'createdAt', desc: true },
@@ -240,18 +250,23 @@ export function SessionsPage() {
 
   const columns = useMemo<ColumnDef<SessionRow>[]>(() => {
     const base: ColumnDef<SessionRow>[] = [
-      textColumn('clientId', 'Client ID', (row) => row.clientId, 165),
-      textColumn('creatorIp', 'IP', (row) => row.creatorIp, 125),
+      textColumn('clientId', 'Client ID', (row) => row.clientId, 165, true),
+      textColumn('creatorIp', 'IP', (row) => row.creatorIp, 125, true),
       textColumn('city', 'Город', (row) => row.city, 130),
       textColumn('isp', 'ISP', (row) => row.isp, 180),
-      textColumn('productName', 'Игра', (row) => row.productName, 190),
-      textColumn('serverName', 'Станция', (row) => row.serverName, 170),
+      textColumn('productName', 'Игра', (row) => row.productName, 190, true),
+      textColumn('serverName', 'Станция', (row) => row.serverName, 170, true),
       dateColumn('createdAt', 'Начало', (row) => row.createdAt),
       durationColumn('duration', 'Длительность', (row) => row.duration, now),
-      textColumn('billing', 'Billing', (row) => row.billing, 105),
+      textColumn('billing', 'Billing', (row) => row.billing, 105, true),
       dateColumn('finishedAt', 'Окончание', (row) => row.finishedAt),
       textColumn('score', 'Score', (row) => row.score, 82),
-      textColumn('scoreText', 'Оценка', (row) => row.scoreText, 210),
+      {
+        ...textColumn('scoreText', 'Отзыв', (row) => row.scoreText, 210),
+        cell: ({ getValue }) => (
+          <SessionReview text={displayText(getValue())} />
+        ),
+      },
     ];
     if (!detailed) return base;
     return [
@@ -303,7 +318,12 @@ export function SessionsPage() {
   );
 
   const loadMore = async () => {
-    if (!sessionsQuery.data || !account || loadingMore || !remainingServerIds.length)
+    if (
+      !sessionsQuery.data ||
+      !account ||
+      loadingMore ||
+      !remainingServerIds.length
+    )
       return;
     stopRequested.current = false;
     setLoadingMore(true);
@@ -324,7 +344,9 @@ export function SessionsPage() {
         onProgress: setHistoryProgress,
         onServerLoaded: (serverId, loaded) => {
           queryClient.setQueryData<SessionDataset>(key, (current) =>
-            current ? mergeSessionDataset(current, loaded, [serverId]) : current,
+            current
+              ? mergeSessionDataset(current, loaded, [serverId])
+              : current,
           );
         },
       },
@@ -444,9 +466,7 @@ export function SessionsPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
                       <DropdownMenuGroup>
-                        <DropdownMenuLabel>
-                          Видимость колонок
-                        </DropdownMenuLabel>
+                        <DropdownMenuLabel>Видимость колонок</DropdownMenuLabel>
                         {table.getAllLeafColumns().map((column) => (
                           <DropdownMenuCheckboxItem
                             key={column.id}
@@ -625,6 +645,7 @@ export function SessionsPage() {
                                     )
                                   }
                                   placeholder="Фильтр…"
+                                  aria-label={`Фильтр: ${columnLabel(header.column.id)}`}
                                   className="mt-1 h-7 min-w-24 text-xs font-normal"
                                 />
                               )}
@@ -727,6 +748,7 @@ function textColumn(
   header: string,
   accessor: (row: SessionRow) => string,
   size = 130,
+  filterOnClick = false,
 ): ColumnDef<SessionRow> {
   return {
     id,
@@ -734,8 +756,58 @@ function textColumn(
     accessorFn: accessor,
     size,
     filterFn: 'includesString',
-    cell: ({ getValue }) => displayText(getValue()) || '—',
+    cell: ({ getValue, column, table }) => {
+      const value = displayText(getValue());
+      if (!value) return '—';
+      if (!filterOnClick) return value;
+      return (
+        <button
+          type="button"
+          aria-label={`Фильтровать ${header}: ${value}`}
+          title={`Вставить в фильтр «${header}»`}
+          className="block max-w-full truncate rounded-sm text-left underline decoration-dotted underline-offset-3 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          onClick={() => {
+            column.setFilterValue(value);
+            table.setPageIndex(0);
+          }}
+        >
+          {value}
+        </button>
+      );
+    },
   };
+}
+
+function SessionReview({ text }: { text: string }) {
+  if (!text) return <>—</>;
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        delay={220}
+        closeDelay={180}
+        render={
+          <button
+            type="button"
+            aria-label="Показать полный отзыв"
+            className="block max-w-full truncate rounded-sm text-left underline decoration-dotted underline-offset-3 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          />
+        }
+      >
+        {text}
+      </HoverCardTrigger>
+      <HoverCardContent
+        aria-label="Полный отзыв"
+        side="bottom"
+        align="start"
+        className="w-[min(28rem,calc(100vw-2rem))] rounded-xl p-4 font-sans"
+      >
+        <p className="mb-2 font-medium">Отзыв</p>
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-6">
+          {text}
+        </p>
+      </HoverCardContent>
+    </HoverCard>
+  );
 }
 function numberColumn(
   id: string,
@@ -870,7 +942,7 @@ function columnLabel(id: string) {
     billing: 'Billing',
     finishedAt: 'Окончание',
     score: 'Score',
-    scoreText: 'Оценка',
+    scoreText: 'Отзыв',
     status: 'Статус',
     uuid: 'UUID',
     serverId: 'Server ID',

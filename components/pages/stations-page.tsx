@@ -3,8 +3,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ChevronDown,
   ExternalLink,
+  Eye,
+  EyeOff,
   FilePenLine,
+  Globe2,
+  Monitor,
   RefreshCw,
   ServerOff,
   Wifi,
@@ -19,6 +24,11 @@ import { StationActivityHover } from '@/components/station-activity-hover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -62,6 +72,7 @@ import { cn } from '@/lib/utils';
 import { useSessionData } from '@/hooks/use-session-data';
 import { useCatalog } from '@/hooks/use-catalog';
 import { useMinuteClock } from '@/hooks/use-minute-clock';
+import { useHiddenStations } from '@/hooks/use-hidden-stations';
 import { sessionDisplayTiming } from '@/lib/drova/session-display';
 
 const descriptionSchema = z.object({
@@ -85,6 +96,19 @@ export function StationsPage({
     enabled: Boolean(account),
   });
   const stations = stationsQuery.data ?? [];
+  const {
+    hiddenIds,
+    storageError,
+    ready: hiddenReady,
+    setHidden,
+  } = useHiddenStations(mode, account?.uuid);
+  const hiddenIdSet = useMemo(() => new Set(hiddenIds), [hiddenIds]);
+  const visibleStations = stations.filter(
+    (station) => !hiddenIdSet.has(station.uuid),
+  );
+  const hiddenStations = stations.filter((station) =>
+    hiddenIdSet.has(station.uuid),
+  );
   const stationProductsQuery = useQuery<Record<string, GameSummary[] | null>>({
     queryKey: [
       'station-game-counts',
@@ -185,7 +209,7 @@ export function StationsPage({
     },
   });
 
-  const onlineCount = stations.filter((station) =>
+  const onlineCount = visibleStations.filter((station) =>
     isStationOnline(station.state, station.last_heartbeat),
   ).length;
   const pendingId = flagMutation.variables?.station.uuid;
@@ -221,7 +245,9 @@ export function StationsPage({
           <div className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">
             <span className="size-1.5 rounded-full bg-primary" />
             {account
-              ? `${onlineCount} из ${stations.length} станций в сети`
+              ? hiddenReady
+                ? `${onlineCount} из ${visibleStations.length} станций в сети`
+                : 'Загружаем настройки станций…'
               : 'Подключение не настроено'}
           </div>
           <h1 className="text-2xl font-semibold tracking-[-0.035em] md:text-3xl">
@@ -264,7 +290,7 @@ export function StationsPage({
 
       {!account && !stationsQuery.isPending ? (
         <EmptyConnection onOpenSettings={() => setSettingsOpen(true)} />
-      ) : stationsQuery.isPending ? (
+      ) : stationsQuery.isPending || !hiddenReady ? (
         <StationsSkeleton />
       ) : stationsQuery.error ? (
         <Alert variant="destructive" className="mt-7">
@@ -283,6 +309,14 @@ export function StationsPage({
             Новые станции создаются в официальном кабинете Drova.
           </p>
         </div>
+      ) : visibleStations.length === 0 ? (
+        <div className="mt-7 rounded-2xl border border-dashed p-12 text-center">
+          <EyeOff className="mx-auto size-6 text-muted-foreground" />
+          <h2 className="mt-4 font-semibold">Все станции скрыты</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Верните станции из списка «Скрытые» ниже.
+          </p>
+        </div>
       ) : (
         <div className="mt-7 overflow-x-auto rounded-2xl border bg-card shadow-[0_18px_60px_-44px_rgb(0_0_0/0.45)]">
           <Table>
@@ -293,22 +327,24 @@ export function StationsPage({
                 <TableHead>Последняя сессия</TableHead>
                 <TableHead>
                   Длинные сессии
-                  <span className="block text-xs font-normal text-muted-foreground">30 дней</span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    30 дней
+                  </span>
                 </TableHead>
                 <TableHead>Игры</TableHead>
-                <TableHead className="text-center">Публикация</TableHead>
-                <TableHead className="text-center">Рабочий стол</TableHead>
-                <TableHead className="text-center">Обновления</TableHead>
+                <TableHead>Управление</TableHead>
                 <TableHead className="pr-5 text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stations.map((station) => {
+              {visibleStations.map((station) => {
                 const pending =
                   flagMutation.isPending && pendingId === station.uuid;
                 const productList = stationProductsQuery.data?.[station.uuid];
                 const latestSession = latestSessionsQuery.data?.[station.uuid];
-                const timing = latestSession ? sessionDisplayTiming(latestSession, now) : null;
+                const timing = latestSession
+                  ? sessionDisplayTiming(latestSession, now)
+                  : null;
                 const displayStatus = getStationDisplayStatus(
                   station.state,
                   station.last_heartbeat,
@@ -364,10 +400,16 @@ export function StationsPage({
                             {latestGameTitle ?? 'Название недоступно'}
                           </p>
                           <p className="mt-0.5 text-xs text-muted-foreground">
-                            {!timing?.ongoing && Number.isFinite(latestSession.created_on) && (
-                              <>{formatHeartbeat(latestSession.created_on)} · </>
-                            )}
-                            {timing?.duration != null ? formatDuration(timing.duration) : '—'}
+                            {!timing?.ongoing &&
+                              Number.isFinite(latestSession.created_on) && (
+                                <>
+                                  {formatHeartbeat(latestSession.created_on)}{' '}
+                                  ·{' '}
+                                </>
+                              )}
+                            {timing?.duration != null
+                              ? formatDuration(timing.duration)
+                              : '—'}
                           </p>
                           {latestClientId && (
                             <div className="mt-0.5">
@@ -426,57 +468,93 @@ export function StationsPage({
                         <Skeleton className="h-5 w-8 rounded-full" />
                       )}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={station.published}
-                        disabled={pending}
-                        aria-label={`Публикация ${station.name}`}
-                        onCheckedChange={(checked) =>
-                          flagMutation.mutate({
-                            station,
-                            flag: 'published',
-                            checked,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={station.allow_desktop}
-                        disabled={pending}
-                        aria-label={`Рабочий стол ${station.name}`}
-                        onCheckedChange={(checked) =>
-                          flagMutation.mutate({
-                            station,
-                            flag: 'allow_desktop',
-                            checked,
-                          })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={!station.disable_updates}
-                        disabled={pending}
-                        aria-label={`Автообновления ${station.name}`}
-                        onCheckedChange={(checked) =>
-                          flagMutation.mutate({
-                            station,
-                            flag: 'disable_updates',
-                            checked,
-                          })
-                        }
-                      />
+                    <TableCell>
+                      <div className="flex flex-col gap-2 py-1">
+                        <div
+                          className="flex items-center gap-2"
+                          title="Публикация"
+                        >
+                          <Globe2
+                            className="size-3.5 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <Switch
+                            checked={station.published}
+                            disabled={pending}
+                            aria-label={`Публикация ${station.name}`}
+                            onCheckedChange={(checked) =>
+                              flagMutation.mutate({
+                                station,
+                                flag: 'published',
+                                checked,
+                              })
+                            }
+                          />
+                        </div>
+                        <div
+                          className="flex items-center gap-2"
+                          title="Рабочий стол"
+                        >
+                          <Monitor
+                            className="size-3.5 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <Switch
+                            checked={station.allow_desktop}
+                            disabled={pending}
+                            aria-label={`Рабочий стол ${station.name}`}
+                            onCheckedChange={(checked) =>
+                              flagMutation.mutate({
+                                station,
+                                flag: 'allow_desktop',
+                                checked,
+                              })
+                            }
+                          />
+                        </div>
+                        <div
+                          className="flex items-center gap-2"
+                          title="Обновления"
+                        >
+                          <RefreshCw
+                            className="size-3.5 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <Switch
+                            checked={!station.disable_updates}
+                            disabled={pending}
+                            aria-label={`Автообновления ${station.name}`}
+                            onCheckedChange={(checked) =>
+                              flagMutation.mutate({
+                                station,
+                                flag: 'disable_updates',
+                                checked,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell className="pr-5 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingStation(station)}
-                      >
-                        <FilePenLine />
-                        Описание
-                      </Button>
+                      <div className="flex flex-col items-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingStation(station)}
+                        >
+                          <FilePenLine />
+                          Описание
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Скрыть станцию ${station.name}`}
+                          onClick={() => setHidden(station.uuid, true)}
+                        >
+                          <EyeOff />
+                          Скрыть
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -485,6 +563,47 @@ export function StationsPage({
           </Table>
         </div>
       )}
+
+      {storageError && (
+        <Alert className="mt-4">
+          <AlertDescription>{storageError}</AlertDescription>
+        </Alert>
+      )}
+      {account &&
+        hiddenReady &&
+        !stationsQuery.error &&
+        hiddenStations.length > 0 && (
+          <Collapsible className="mt-5 rounded-2xl border bg-card">
+            <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-2xl p-4 text-left text-sm font-medium">
+              <EyeOff className="size-4 text-muted-foreground" />
+              Скрытые ({hiddenStations.length})
+              <ChevronDown className="ml-auto size-4 transition-transform group-aria-expanded:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ul className="divide-y border-t px-4">
+                {hiddenStations.map((station) => (
+                  <li
+                    key={station.uuid}
+                    className="flex items-center justify-between gap-3 py-3"
+                  >
+                    <span className="min-w-0 truncate text-sm text-muted-foreground">
+                      {station.name}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Вернуть станцию ${station.name}`}
+                      onClick={() => setHidden(station.uuid, false)}
+                    >
+                      <Eye />
+                      Вернуть
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
       <DescriptionDialog
         station={editingStation}

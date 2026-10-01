@@ -5,14 +5,12 @@ import {
   BarChart3,
   ChevronDown,
   ChevronRight,
-  CircleDollarSign,
   Clock3,
   RefreshCw,
   Server,
   WalletCards,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 
 import { useMerchant } from '@/components/merchant-context';
 import { PersonalStatistics } from '@/components/pages/personal-statistics';
@@ -25,12 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -55,10 +47,6 @@ const periods: Array<{ key: PeriodKey; label: string }> = [
   { key: 'weekStat', label: 'Неделя' },
   { key: 'monthStat', label: 'Месяц' },
 ];
-
-const chartConfig = {
-  income: { label: 'Доход', color: 'var(--chart-1)' },
-} satisfies ChartConfig;
 
 export function StatisticsPage() {
   const { api, account, mode, setSettingsOpen } = useMerchant();
@@ -112,21 +100,10 @@ export function StatisticsPage() {
               name: stationNames.get(id) ?? `Станция ${id.slice(0, 8)}`,
               ...value,
             }))
-            .sort(
-              (a, b) =>
-                b.totalStat.totalIncome - a.totalStat.totalIncome ||
-                b.totalStat.totalMsecs - a.totalStat.totalMsecs,
-            )
+            .sort((a, b) => b.totalStat.totalMsecs - a.totalStat.totalMsecs)
         : [],
     [period, stationNames],
   );
-  const chartData = rows
-    .slice(0, 8)
-    .map((row) => ({
-      name: compactName(row.name),
-      income: row.totalStat.totalIncome,
-    }));
-
   const refresh = () => {
     void usageQuery.refetch();
     void stationsQuery.refetch();
@@ -202,7 +179,7 @@ export function StatisticsPage() {
       ) : (
         period && (
           <>
-            <div className="mt-7 grid gap-3 sm:grid-cols-3">
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <MetricCard
                 icon={Server}
                 label="Сессии"
@@ -217,20 +194,14 @@ export function StatisticsPage() {
                 value={formatDuration(period.totalStat.totalMsecs)}
                 hint="по всем станциям"
               />
-              <MetricCard
-                icon={CircleDollarSign}
-                label="Доход"
-                value={moneyFormatter.format(period.totalStat.totalIncome)}
-                hint="значение Drova API"
-              />
             </div>
 
-            <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+            <div className="mt-6">
               <Card className="overflow-hidden">
                 <CardHeader>
                   <CardTitle>Станции за период</CardTitle>
                   <CardDescription>
-                    Сессии, время и доход с возможностью раскрыть игры.
+                    Сессии и время с возможностью раскрыть игры.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
@@ -239,8 +210,7 @@ export function StatisticsPage() {
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="pl-5">Станция</TableHead>
                         <TableHead>Сессии</TableHead>
-                        <TableHead>Время</TableHead>
-                        <TableHead className="pr-5 text-right">Доход</TableHead>
+                        <TableHead className="pr-5 text-right">Время</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -259,59 +229,6 @@ export function StatisticsPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Доход по станциям</CardTitle>
-                  <CardDescription>
-                    Восемь лидеров выбранного периода.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {chartData.some((item) => item.income > 0) ? (
-                    <ChartContainer
-                      config={chartConfig}
-                      className="h-[300px] w-full aspect-auto"
-                    >
-                      <BarChart
-                        data={chartData}
-                        layout="vertical"
-                        margin={{ left: 0, right: 16 }}
-                      >
-                        <CartesianGrid horizontal={false} />
-                        <XAxis type="number" hide />
-                        <YAxis
-                          dataKey="name"
-                          type="category"
-                          tickLine={false}
-                          axisLine={false}
-                          width={92}
-                          tick={{ fontSize: 11 }}
-                        />
-                        <ChartTooltip
-                          cursor={false}
-                          content={
-                            <ChartTooltipContent
-                              formatter={(value) =>
-                                moneyFormatter.format(Number(value))
-                              }
-                            />
-                          }
-                        />
-                        <Bar
-                          dataKey="income"
-                          fill="var(--color-income)"
-                          radius={[0, 6, 6, 0]}
-                        />
-                      </BarChart>
-                    </ChartContainer>
-                  ) : (
-                    <div className="grid h-[300px] place-items-center text-center text-sm text-muted-foreground">
-                      За этот период доход равен нулю.
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </div>
@@ -522,14 +439,13 @@ function StationStatRows({
         <TableCell>
           {integerFormatter.format(row.totalStat.sessionCount)}
         </TableCell>
-        <TableCell>{formatDuration(row.totalStat.totalMsecs)}</TableCell>
-        <TableCell className="pr-5 text-right font-medium">
-          {moneyFormatter.format(row.totalStat.totalIncome)}
+        <TableCell className="pr-5 text-right">
+          {formatDuration(row.totalStat.totalMsecs)}
         </TableCell>
       </TableRow>
       {expanded && (
         <TableRow className="bg-muted/20 hover:bg-muted/20">
-          <TableCell colSpan={4} className="px-5 py-4">
+          <TableCell colSpan={3} className="px-5 py-4">
             {productsQuery.isPending ? (
               <Skeleton className="h-20 w-full" />
             ) : (
@@ -546,8 +462,7 @@ function StationStatRows({
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {integerFormatter.format(stat.sessionCount)} сессий ·{' '}
-                        {formatDuration(stat.totalMsecs)} ·{' '}
-                        {moneyFormatter.format(stat.totalIncome)}
+                        {formatDuration(stat.totalMsecs)}
                       </p>
                     </div>
                   ))}
@@ -560,14 +475,11 @@ function StationStatRows({
   );
 }
 
-function compactName(value: string) {
-  return value.length > 16 ? `${value.slice(0, 15)}…` : value;
-}
 function StatisticsSkeleton() {
   return (
     <div className="mt-7 space-y-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[0, 1, 2].map((item) => (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {[0, 1].map((item) => (
           <Skeleton key={item} className="h-28" />
         ))}
       </div>
